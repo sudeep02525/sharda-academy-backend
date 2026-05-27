@@ -18,6 +18,14 @@ import {
   sendExamAlertEmail 
 } from "../utils/mailer.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
+import * as StudentAdminController from "../controllers/StudentAdminController.js";
+import * as AttendanceAdminController from "../controllers/AttendanceAdminController.js";
+import * as HomeworkAdminController from "../controllers/HomeworkAdminController.js";
+import * as StudyMaterialAdminController from "../controllers/StudyMaterialAdminController.js";
+import * as FeeAdminController from "../controllers/FeeAdminController.js";
+import * as ResultAdminController from "../controllers/ResultAdminController.js";
+import * as NoticeAdminController from "../controllers/NoticeAdminController.js";
+import * as TimetableAdminController from "../controllers/TimetableAdminController.js";
 
 const router = express.Router();
 
@@ -801,5 +809,88 @@ router.post("/admin/fees/remind/:id", protect, restrictTo("admin"), async (req, 
     return res.status(500).json({ success: false, message: "Failed to dispatch reminder notification email" });
   }
 });
+
+// ==========================================
+// 👨‍🎓 ADMIN STUDENT MANAGEMENT
+// ==========================================
+router.post("/admin/students", protect, restrictTo("admin"), StudentAdminController.addStudent);
+router.get("/admin/students", protect, restrictTo("admin"), StudentAdminController.getAllStudents);
+router.get("/admin/students/:id", protect, restrictTo("admin"), StudentAdminController.getStudentById);
+router.put("/admin/students/:id", protect, restrictTo("admin"), StudentAdminController.updateStudent);
+router.delete("/admin/students/:id", protect, restrictTo("admin"), StudentAdminController.deleteStudent);
+router.put("/admin/students/:id/deactivate", protect, restrictTo("admin"), StudentAdminController.deactivateStudent);
+router.put("/admin/students/:id/activate", protect, restrictTo("admin"), StudentAdminController.activateStudent);
+router.put("/admin/students/:id/reset-password", protect, restrictTo("admin"), StudentAdminController.resetStudentPassword);
+
+// ==========================================
+// 📊 ADMIN ATTENDANCE MANAGEMENT
+// ==========================================
+router.post("/admin/attendance/mark", protect, restrictTo("admin"), AttendanceAdminController.markAttendance);
+router.get("/admin/attendance", protect, restrictTo("admin"), AttendanceAdminController.getAttendance);
+router.get("/admin/attendance/daily-report", protect, restrictTo("admin"), AttendanceAdminController.getDailyReport);
+router.get("/admin/attendance/monthly-report", protect, restrictTo("admin"), AttendanceAdminController.getMonthlyReport);
+router.put("/admin/attendance/:id", protect, restrictTo("admin"), AttendanceAdminController.updateAttendance);
+router.delete("/admin/attendance/:id", protect, restrictTo("admin"), AttendanceAdminController.deleteAttendance);
+
+// ==========================================
+// 📚 ADMIN HOMEWORK MANAGEMENT
+// ==========================================
+router.post("/admin/homework", protect, restrictTo("admin"), HomeworkAdminController.uploadHomework);
+router.put("/admin/homework/:id", protect, restrictTo("admin"), HomeworkAdminController.updateHomework);
+router.delete("/admin/homework/:id", protect, restrictTo("admin"), HomeworkAdminController.deleteHomework);
+router.get("/homework", protect, HomeworkAdminController.getHomework);
+router.get("/homework/:id", protect, HomeworkAdminController.getHomeworkById);
+
+// ==========================================
+// 📖 ADMIN STUDY MATERIAL MANAGEMENT
+// ==========================================
+router.post("/admin/studymaterial", protect, restrictTo("admin"), StudyMaterialAdminController.uploadStudyMaterial);
+router.put("/admin/studymaterial/:id", protect, restrictTo("admin"), StudyMaterialAdminController.updateStudyMaterial);
+router.delete("/admin/studymaterial/:id", protect, restrictTo("admin"), StudyMaterialAdminController.deleteStudyMaterial);
+router.get("/studymaterial", protect, StudyMaterialAdminController.getStudyMaterial);
+router.get("/studymaterial/:id", protect, StudyMaterialAdminController.getStudyMaterialById);
+
+// ==========================================
+// 💰 ADMIN FEE MANAGEMENT
+// ==========================================
+router.post("/admin/fees", protect, restrictTo("admin"), FeeAdminController.addFeeInvoice);
+router.get("/admin/fees/pending", protect, restrictTo("admin"), FeeAdminController.getPendingDues);
+router.get("/fees", protect, FeeAdminController.getFees);
+router.get("/fees/summary/:studentId", protect, FeeAdminController.getFeeSummary);
+router.put("/admin/fees/:id", protect, restrictTo("admin"), FeeAdminController.updateFeeStatus);
+router.delete("/admin/fees/:id", protect, restrictTo("admin"), FeeAdminController.deleteFee);
+
+// ==========================================
+// 📝 ADMIN RESULT MANAGEMENT
+// ==========================================
+router.post("/admin/results", protect, restrictTo("admin"), ResultAdminController.uploadResults);
+router.get("/admin/results/rankings/:examName", protect, restrictTo("admin"), ResultAdminController.getExamRankings);
+router.get("/results", protect, ResultAdminController.getResults);
+router.get("/results/performance/:studentId", protect, ResultAdminController.getPerformanceSummary);
+router.put("/admin/results/:id", protect, restrictTo("admin"), ResultAdminController.updateResult);
+router.delete("/admin/results/:id", protect, restrictTo("admin"), ResultAdminController.deleteResult);
+
+// ==========================================
+// 📢 ADMIN NOTICE MANAGEMENT
+// ==========================================
+router.post("/admin/notices", protect, restrictTo("admin"), NoticeAdminController.createNotice);
+router.get("/admin/notices/:id/send-email", protect, restrictTo("admin"), NoticeAdminController.sendNoticeEmail);
+router.put("/admin/notices/:id", protect, restrictTo("admin"), NoticeAdminController.updateNotice);
+router.delete("/admin/notices/:id", protect, restrictTo("admin"), NoticeAdminController.deleteNotice);
+router.get("/notices", protect, NoticeAdminController.getNotices);
+router.get("/notices/latest", protect, NoticeAdminController.getLatestNotices);
+router.get("/notices/:id", protect, NoticeAdminController.getNoticeById);
+
+// ==========================================
+// 🕐 ADMIN TIMETABLE MANAGEMENT
+// ==========================================
+router.post("/admin/timetable", protect, restrictTo("admin"), TimetableAdminController.createTimetableEntry);
+router.post("/admin/timetable/bulk", protect, restrictTo("admin"), TimetableAdminController.bulkUploadTimetable);
+router.get("/admin/timetable", protect, TimetableAdminController.getTimetable);
+router.get("/timetable/weekly", protect, TimetableAdminController.getWeeklyTimetable);
+router.get("/timetable", protect, TimetableAdminController.getTimetable);
+router.get("/timetable/:id", protect, TimetableAdminController.getTimetableById);
+router.put("/admin/timetable/:id", protect, restrictTo("admin"), TimetableAdminController.updateTimetableEntry);
+router.delete("/admin/timetable/:id", protect, restrictTo("admin"), TimetableAdminController.deleteTimetableEntry);
 
 export default router;

@@ -19,6 +19,11 @@ const UserSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    parentPhoneNumber: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     password: {
       type: String,
       default: "", // Optional password backup
@@ -91,6 +96,10 @@ const UserSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    address: {
+      type: String,
+      default: "",
+    },
     fatherName: {
       type: String,
       default: "",
@@ -110,6 +119,14 @@ const UserSchema = new mongoose.Schema(
     profilePhoto: {
       type: String,
       default: "",
+    },
+    accountStatus: {
+      type: Boolean,
+      default: true,
+    },
+    admissionDate: {
+      type: Date,
+      default: Date.now,
     },
     status: {
       type: String,

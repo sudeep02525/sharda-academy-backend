@@ -24,18 +24,33 @@ const FeeSchema = new mongoose.Schema(
       type: String, // Format: YYYY-MM-DD
       required: true,
     },
+    paymentDate: {
+      type: String, // Format: YYYY-MM-DD
+      default: null,
+    },
     status: {
       type: String,
       enum: ["Paid", "Unpaid", "Pending"],
       default: "Unpaid",
     },
-    paymentDate: {
-      type: Date,
-      default: null,
-    },
     paymentMethod: {
       type: String,
-      default: "", // "Biometric Card Sync Wallet", "UPI", "Credit Card", "Cash"
+      default: "", // "UPI", "Credit Card", "Cash", "Cheque", etc.
+    },
+    classStandard: {
+      type: Number,
+      min: 1,
+      max: 12,
+      default: null,
+    },
+    batch: {
+      type: String,
+      default: "",
+    },
+    generatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
   },
   {

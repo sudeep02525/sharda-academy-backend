@@ -17,6 +17,16 @@ const AttendanceSchema = new mongoose.Schema(
       enum: ["Present", "Absent", "Late"],
       default: "Present",
     },
+    classStandard: {
+      type: Number,
+      min: 1,
+      max: 12,
+      default: null,
+    },
+    batch: {
+      type: String,
+      default: "",
+    },
     method: {
       type: String,
       enum: ["Biometric", "Manual"],
@@ -29,6 +39,11 @@ const AttendanceSchema = new mongoose.Schema(
     checkOutTime: {
       type: String, // Format: HH:MM AM/PM
       default: "",
+    },
+    markedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User", // Admin who marked attendance
+      default: null,
     },
     deviceName: {
       type: String,
