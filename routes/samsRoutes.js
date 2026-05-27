@@ -402,76 +402,9 @@ router.delete("/admin/users/:id", protect, restrictTo("admin"), async (req, res)
   }
 });
 
-// Admin: Issue Tuition Fee Invoices
-router.post("/admin/fees", protect, restrictTo("admin"), async (req, res) => {
-  const { studentId, amount, dueDate, description } = req.body;
+// Admin: Issue Tuition Fee Invoices — handled by FeeAdminController below
 
-  if (!studentId || !amount || !dueDate) {
-    return res.status(400).json({ success: false, message: "Student, fee Amount, and due Date parameters are required" });
-  }
-
-  try {
-    const invoiceId = `INV-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const feeInvoice = new Fee({
-      studentId,
-      invoiceId,
-      amount,
-      dueDate,
-      description: description || "Tuition & Coaching Fees",
-      status: "Unpaid",
-    });
-
-    await feeInvoice.save();
-
-    // Fetch student details
-    const student = await User.findById(studentId);
-    // Audit Log Activity
-    await new ActivityLog({ action: `Issued invoice bill '${invoiceId}' (₹${amount}) to '${student?.name || "Candidate"}'` }).save();
-
-    return res.status(201).json({ success: true, message: "Billing invoice issued successfully", fee: feeInvoice });
-  } catch (error) {
-    console.error("Issue Fee Error:", error);
-    return res.status(500).json({ success: false, message: "Failed to issue invoice record" });
-  }
-});
-
-// Admin: Mark Tuition invoices as Paid
-router.put("/admin/fees/:id", protect, restrictTo("admin"), async (req, res) => {
-  const feeId = req.params.id;
-  const { status, paymentMethod } = req.body;
-
-  try {
-    const feeInvoice = await Fee.findById(feeId);
-    if (!feeInvoice) {
-      return res.status(404).json({ success: false, message: "Invoice not found" });
-    }
-
-    feeInvoice.status = status || "Paid";
-    if (feeInvoice.status === "Paid") {
-      feeInvoice.paymentDate = new Date();
-      feeInvoice.paymentMethod = paymentMethod || "Cash/UPI Sync Desk";
-    } else {
-      feeInvoice.paymentDate = null;
-      feeInvoice.paymentMethod = "";
-    }
-
-    await feeInvoice.save();
-
-    const student = await User.findById(feeInvoice.studentId);
-    if (student) {
-      student.feeStatus = feeInvoice.status;
-      await student.save();
-    }
-
-    // Audit Log Activity
-    await new ActivityLog({ action: `Collected invoice payment for '${feeInvoice.invoiceId}' from '${student?.name}' via ${paymentMethod || "Cash/UPI"}` }).save();
-
-    return res.status(200).json({ success: true, message: `Invoice updated to status '${feeInvoice.status}' successfully`, fee: feeInvoice });
-  } catch (error) {
-    console.error("Update Fee Error:", error);
-    return res.status(500).json({ success: false, message: "Failed to modify invoice status" });
-  }
-});
+// Admin: Mark Tuition invoices as Paid — handled by FeeAdminController below
 
 // Student: Pay tuition invoice online
 router.put("/fees/:id", protect, restrictTo("student"), async (req, res) => {
@@ -513,120 +446,11 @@ router.put("/fees/:id", protect, restrictTo("student"), async (req, res) => {
   }
 });
 
-// Admin: Schedule Timetable routines
-router.post("/admin/timetables", protect, restrictTo("admin"), async (req, res) => {
-  const { classLevel, batch, subject, teacherName, day, startTime, endTime, room } = req.body;
+// Admin: Schedule Timetable routines — handled by TimetableAdminController below
 
-  if (!classLevel || !batch || !subject || !teacherName || !day || !startTime || !endTime) {
-    return res.status(400).json({ success: false, message: "All scheduling parameters are required" });
-  }
+// Admin: Upload Results — handled by ResultAdminController below (supports bulk upload)
 
-  try {
-    const routine = new Timetable({
-      classLevel,
-      batch,
-      subject,
-      teacherName,
-      day,
-      startTime,
-      endTime,
-      room: room || "Coaching Classroom 1",
-    });
-
-    await routine.save();
-
-    // Audit Log Activity
-    await new ActivityLog({ action: `Scheduled routine class '${subject}' for Std ${classLevel} (${batch}) on ${day}` }).save();
-
-    return res.status(201).json({ success: true, message: "Class routine scheduled successfully", routine });
-  } catch (error) {
-    console.error("Schedule Timetable Error:", error);
-    return res.status(500).json({ success: false, message: "Failed to schedule class routine" });
-  }
-});
-
-// Admin: Upload Results
-router.post("/admin/results", protect, restrictTo("admin"), async (req, res) => {
-  const { studentId, examName, marks } = req.body;
-
-  if (!studentId || !examName || !marks || marks.length === 0) {
-    return res.status(400).json({ success: false, message: "Student, Exam name, and Marks array are required" });
-  }
-
-  try {
-    const result = new Result({
-      studentId,
-      examName,
-      marks,
-    });
-    await result.save();
-
-    const student = await User.findById(studentId);
-    
-    // Audit Log Activity
-    await new ActivityLog({ action: `Uploaded exam scores sheet of '${examName}' for '${student?.name}'` }).save();
-
-    // Trigger SMTP email card
-    if (student) {
-      const resultsSummary = result.marks.map(m => `${m.subject}: ${m.obtained}/${m.max}`).join(", ");
-      const emails = [student.email, student.parentEmail].filter(Boolean);
-      if (emails.length > 0) {
-        for (const email of emails) {
-          try {
-            await sendExamAlertEmail(email, student.name, examName, resultsSummary, result.percentage, result.grade);
-          } catch (mailErr) {
-            console.error("⚠️ Marks email dispatch failed:", mailErr.message);
-          }
-        }
-      }
-    }
-
-    return res.status(201).json({ success: true, message: "Exam result sheet registered and email alerts dispatched successfully", result });
-  } catch (error) {
-    console.error("Result Upload Error:", error);
-    return res.status(500).json({ success: false, message: "Failed to submit marks result record" });
-  }
-});
-
-// Admin: Broadcast Notices
-router.post("/admin/notices", protect, restrictTo("admin"), async (req, res) => {
-  const { title, content, category } = req.body;
-
-  if (!title || !content) {
-    return res.status(400).json({ success: false, message: "Title and Content are required" });
-  }
-
-  try {
-    const notice = new Notice({
-      title,
-      content,
-      category: category || "General",
-      author: "Academy Director",
-    });
-    await notice.save();
-
-    // Audit Log Activity
-    await new ActivityLog({ action: `Broadcasted general alert bulletin: '${title}'` }).save();
-
-    // Fetch all students/parents and dispatch notice bulk emails
-    try {
-      const users = await User.find({ role: "student" });
-      const emails = users.map(u => u.email).filter(Boolean);
-      const parentEmails = users.map(u => u.parentEmail).filter(Boolean);
-      const allEmails = [...new Set([...emails, ...parentEmails])];
-      if (allEmails.length > 0) {
-        await sendNoticeBulkEmail(allEmails, title, content);
-      }
-    } catch (mailErr) {
-      console.error("⚠️ Notice bulk email dispatch failed:", mailErr.message);
-    }
-
-    return res.status(201).json({ success: true, message: "Notice bulletin broadcasted and email notifications dispatched", notice });
-  } catch (error) {
-    console.error("Notice Upload Error:", error);
-    return res.status(500).json({ success: false, message: "Failed to broadcast notice message" });
-  }
-});
+// Admin: Broadcast Notices — handled by NoticeAdminController below
 
 // Admin: Approve Online Admission Inquiry
 router.put("/admin/admissions/:id", protect, restrictTo("admin"), async (req, res) => {
@@ -659,168 +483,17 @@ router.put("/admin/admissions/:id", protect, restrictTo("admin"), async (req, re
 // ==========================================
 // 📚 3. NEW HOMEWORK MANAGEMENT ENDPOINTS
 // ==========================================
-
-// Admin: Upload homework assignment
-router.post("/admin/homework", protect, restrictTo("admin"), async (req, res) => {
-  const { title, description, subject, classLevel, batch, dueDate, attachmentName, attachmentData, teacherName } = req.body;
-  if (!title || !subject || !classLevel || !batch || !dueDate || !teacherName) {
-    return res.status(400).json({ success: false, message: "Missing required homework parameters" });
-  }
-  try {
-    const homework = new Homework({
-      title,
-      description: description || "",
-      subject,
-      classLevel: parseInt(classLevel),
-      batch,
-      dueDate,
-      attachmentName: attachmentName || "",
-      attachmentData: saveBase64File(attachmentData, attachmentName),
-      teacherName,
-    });
-    await homework.save();
-
-    await new ActivityLog({ action: `Uploaded homework assignment '${title}' for Std ${classLevel} (${batch})` }).save();
-
-    // Fetch all students in this class level and batch to send them a bulk email
-    try {
-      const students = await User.find({ role: "student", classLevel: parseInt(classLevel), batch });
-      const emails = students.map(s => s.email).filter(Boolean);
-      const parentEmails = students.map(s => s.parentEmail).filter(Boolean);
-      const allRecipients = [...new Set([...emails, ...parentEmails])];
-
-      if (allRecipients.length > 0) {
-        await sendHomeworkBulkEmail(allRecipients, title, subject, dueDate);
-      }
-    } catch (mailErr) {
-      console.error("⚠️ Homework email dispatch failed:", mailErr.message);
-    }
-
-    return res.status(201).json({ success: true, message: "Homework assignment uploaded successfully", homework });
-  } catch (err) {
-    console.error("Homework Upload Error:", err);
-    return res.status(500).json({ success: false, message: "Failed to upload homework assignment" });
-  }
-});
-
-// Admin: Fetch all homework assignments
-router.get("/admin/homework", protect, restrictTo("admin"), async (req, res) => {
-  try {
-    const homeworks = await Homework.find().sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, homeworks });
-  } catch (err) {
-    console.error("Fetch Homeworks Error:", err);
-    return res.status(500).json({ success: false, message: "Failed to fetch homework assignments" });
-  }
-});
-
-// Admin: Delete homework assignment
-router.delete("/admin/homework/:id", protect, restrictTo("admin"), async (req, res) => {
-  try {
-    await Homework.findByIdAndDelete(req.params.id);
-    await new ActivityLog({ action: `Deleted homework assignment ID: ${req.params.id}` }).save();
-    return res.status(200).json({ success: true, message: "Homework assignment deleted successfully" });
-  } catch (err) {
-    console.error("Delete Homework Error:", err);
-    return res.status(500).json({ success: false, message: "Failed to delete homework assignment" });
-  }
-});
+// NOTE: Homework routes are handled by HomeworkAdminController below.
 
 // ==========================================
 // 📓 4. NEW STUDY MATERIAL MANAGEMENT ENDPOINTS
 // ==========================================
-
-// Admin: Upload study material
-router.post("/admin/study-materials", protect, restrictTo("admin"), async (req, res) => {
-  const { title, description, subject, classLevel, batch, materialType, attachmentName, attachmentData, pages, fileSize } = req.body;
-  if (!title || !subject || !classLevel) {
-    return res.status(400).json({ success: false, message: "Title, Subject and Class Level are required" });
-  }
-  try {
-    const material = new StudyMaterial({
-      title,
-      description: description || "",
-      subject,
-      classLevel: parseInt(classLevel),
-      batch: batch || "All Batches",
-      materialType: materialType || "Notes",
-      attachmentName: attachmentName || "",
-      attachmentData: saveBase64File(attachmentData, attachmentName),
-      pages: pages || "",
-      fileSize: fileSize || "",
-    });
-    await material.save();
-
-    await new ActivityLog({ action: `Uploaded study material notes '${title}' for Std ${classLevel}` }).save();
-    return res.status(201).json({ success: true, message: "Study material notes uploaded successfully", material });
-  } catch (err) {
-    console.error("Study Material Upload Error:", err);
-    return res.status(500).json({ success: false, message: "Failed to upload study material" });
-  }
-});
-
-// Admin: Fetch all study materials
-router.get("/admin/study-materials", protect, restrictTo("admin"), async (req, res) => {
-  try {
-    const materials = await StudyMaterial.find().sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, materials });
-  } catch (err) {
-    console.error("Fetch Study Materials Error:", err);
-    return res.status(500).json({ success: false, message: "Failed to fetch study materials" });
-  }
-});
-
-// Admin: Delete study material
-router.delete("/admin/study-materials/:id", protect, restrictTo("admin"), async (req, res) => {
-  try {
-    await StudyMaterial.findByIdAndDelete(req.params.id);
-    await new ActivityLog({ action: `Deleted study material ID: ${req.params.id}` }).save();
-    return res.status(200).json({ success: true, message: "Study material deleted successfully" });
-  } catch (err) {
-    console.error("Delete Study Material Error:", err);
-    return res.status(500).json({ success: false, message: "Failed to delete study material" });
-  }
-});
+// NOTE: Study material routes are handled by StudyMaterialAdminController below.
 
 // ==========================================
 // 🖊️ 5. NEW MANUAL ATTENDANCE MANAGEMENT ENDPOINTS
 // ==========================================
-
-// Admin: Mark attendance manually
-router.post("/admin/attendance", protect, restrictTo("admin"), async (req, res) => {
-  const { studentId, date, status, checkInTime, checkOutTime } = req.body;
-  if (!studentId || !date || !status) {
-    return res.status(400).json({ success: false, message: "Student, Date, and Status are required" });
-  }
-  try {
-    let attendance = await Attendance.findOne({ studentId, date });
-    if (attendance) {
-      attendance.status = status;
-      if (checkInTime) attendance.checkInTime = checkInTime;
-      if (checkOutTime) attendance.checkOutTime = checkOutTime;
-      attendance.method = "Manual";
-      await attendance.save();
-    } else {
-      attendance = new Attendance({
-        studentId,
-        date,
-        status,
-        method: "Manual",
-        checkInTime: checkInTime || "09:00 AM",
-        checkOutTime: checkOutTime || "04:00 PM",
-        deviceName: "Manual ERP Dashboard",
-      });
-      await attendance.save();
-    }
-
-    const student = await User.findById(studentId);
-    await new ActivityLog({ action: `Manually marked attendance for '${student?.name}' as '${status}' on ${date}` }).save();
-    return res.status(200).json({ success: true, message: "Attendance status saved successfully", attendance });
-  } catch (err) {
-    console.error("Manual Attendance Error:", err);
-    return res.status(500).json({ success: false, message: "Failed to save attendance record" });
-  }
-});
+// NOTE: Attendance routes are handled by AttendanceAdminController below.
 
 // ==========================================
 // 🪙 6. NEW TRANSACT FEE PAYMENT REMINDER ENDPOINT
@@ -892,8 +565,12 @@ router.get("/homework/:id", protect, HomeworkAdminController.getHomeworkById);
 // 📖 ADMIN STUDY MATERIAL MANAGEMENT
 // ==========================================
 router.post("/admin/studymaterial", protect, restrictTo("admin"), StudyMaterialAdminController.uploadStudyMaterial);
+router.post("/admin/study-materials", protect, restrictTo("admin"), StudyMaterialAdminController.uploadStudyMaterial);
 router.put("/admin/studymaterial/:id", protect, restrictTo("admin"), StudyMaterialAdminController.updateStudyMaterial);
+router.put("/admin/study-materials/:id", protect, restrictTo("admin"), StudyMaterialAdminController.updateStudyMaterial);
 router.delete("/admin/studymaterial/:id", protect, restrictTo("admin"), StudyMaterialAdminController.deleteStudyMaterial);
+router.delete("/admin/study-materials/:id", protect, restrictTo("admin"), StudyMaterialAdminController.deleteStudyMaterial);
+router.get("/admin/study-materials", protect, restrictTo("admin"), StudyMaterialAdminController.getStudyMaterial);
 router.get("/studymaterial", protect, StudyMaterialAdminController.getStudyMaterial);
 router.get("/studymaterial/:id", protect, StudyMaterialAdminController.getStudyMaterialById);
 

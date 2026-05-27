@@ -1,5 +1,28 @@
+import fs from "fs";
+import path from "path";
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
+
+// Helper to save Base64 data as a physical file and return a static URL
+const saveBase64File = (base64String, originalName) => {
+  if (!base64String || !base64String.startsWith("data:")) {
+    return base64String || "";
+  }
+  try {
+    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return base64String;
+    const fileBuffer = Buffer.from(matches[2], "base64");
+    const ext = path.extname(originalName || "profile.jpg") || ".jpg";
+    const uniqueName = `profile_${Date.now()}${ext}`;
+    const uploadsDir = "./uploads";
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+    fs.writeFileSync(path.join(uploadsDir, uniqueName), fileBuffer);
+    return `/uploads/${uniqueName}`;
+  } catch (err) {
+    console.error("Failed to save profile photo:", err.message);
+    return "";
+  }
+};
 
 // @desc    Add a new student (Admin)
 // @route   POST /api/admin/students
@@ -41,7 +64,7 @@ export const addStudent = async (req, res) => {
       address,
       password: hashedPassword,
       parentEmail: parentEmail || "",
-      profilePhoto: profilePhoto || "",
+      profilePhoto: profilePhoto ? saveBase64File(profilePhoto, "profile.jpg") : "",
       role: "student",
       accountStatus: true,
     });
@@ -99,7 +122,7 @@ export const updateStudent = async (req, res) => {
     if (rollNumber) student.rollNumber = rollNumber;
     if (address) student.address = address;
     if (parentEmail) student.parentEmail = parentEmail;
-    if (profilePhoto) student.profilePhoto = profilePhoto;
+    if (profilePhoto) student.profilePhoto = saveBase64File(profilePhoto, "profile.jpg");
 
     await student.save();
 
