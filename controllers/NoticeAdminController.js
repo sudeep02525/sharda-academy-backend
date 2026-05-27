@@ -1,5 +1,6 @@
 import Notice from "../models/Notice.js";
 import User from "../models/User.js";
+import { sendNoticeBulkEmail } from "../utils/mailer.js";
 
 // @desc    Create notice (Admin)
 // @route   POST /api/admin/notices
@@ -212,8 +213,14 @@ export const sendNoticeEmail = async (req, res) => {
       if (student.parentEmail) emailList.push(student.parentEmail);
     });
 
-    // TODO: Integrate with email service
-    // await sendBulkEmail(emailList, notice.title, notice.content);
+    // Integrate with email service
+    try {
+      if (emailList.length > 0) {
+        await sendNoticeBulkEmail(emailList, notice.title, notice.content);
+      }
+    } catch (mailErr) {
+      console.error("⚠️ Notice email delivery failed:", mailErr.message);
+    }
 
     res.status(200).json({
       success: true,

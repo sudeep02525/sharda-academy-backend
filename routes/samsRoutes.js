@@ -1,6 +1,7 @@
 import express from "express";
 import fs from "fs";
 import path from "path";
+import bcryptjs from "bcryptjs";
 import User from "../models/User.js";
 import Attendance from "../models/Attendance.js";
 import Notice from "../models/Notice.js";
@@ -300,12 +301,15 @@ router.post("/admin/users", protect, restrictTo("admin"), async (req, res) => {
       savedPhotoUrl = saveBase64File(profilePhoto, "profile.jpg");
     }
 
+    const salt = bcryptjs.genSaltSync(10);
+    const hashedPassword = bcryptjs.hashSync(password || "12345678", salt);
+
     const newUser = new User({
       name,
       email: email.toLowerCase(),
       phone,
       role,
-      password: password || "",
+      password: hashedPassword,
       rollNumber,
       classLevel,
       batch,
@@ -355,6 +359,9 @@ router.put("/admin/users/:id", protect, restrictTo("admin"), async (req, res) =>
       if (updates[key] !== undefined && updates[key] !== "") {
         if (key === "email" || key === "parentEmail") {
           user[key] = updates[key].toLowerCase();
+        } else if (key === "password") {
+          const salt = bcryptjs.genSaltSync(10);
+          user.password = bcryptjs.hashSync(updates.password, salt);
         } else {
           user[key] = updates[key];
         }
@@ -463,6 +470,46 @@ router.put("/admin/fees/:id", protect, restrictTo("admin"), async (req, res) => 
   } catch (error) {
     console.error("Update Fee Error:", error);
     return res.status(500).json({ success: false, message: "Failed to modify invoice status" });
+  }
+});
+
+// Student: Pay tuition invoice online
+router.put("/fees/:id", protect, restrictTo("student"), async (req, res) => {
+  const feeId = req.params.id;
+  const { status, paymentMethod } = req.body;
+
+  try {
+    const feeInvoice = await Fee.findById(feeId);
+    if (!feeInvoice) {
+      return res.status(404).json({ success: false, message: "Invoice record not found" });
+    }
+
+    // Verify this student owns the fee record
+    if (feeInvoice.studentId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "Access forbidden: Unauthorized fee payment" });
+    }
+
+    feeInvoice.status = status || "Paid";
+    if (feeInvoice.status === "Paid") {
+      feeInvoice.paymentDate = new Date();
+      feeInvoice.paymentMethod = paymentMethod || "UPI Checkout Portal";
+    }
+
+    await feeInvoice.save();
+
+    const student = await User.findById(feeInvoice.studentId);
+    if (student) {
+      student.feeStatus = feeInvoice.status;
+      await student.save();
+    }
+
+    // Audit Log Activity
+    await new ActivityLog({ action: `Online payment submitted for fee invoice '${feeInvoice.invoiceId}' by '${student?.name}' via ${paymentMethod || "UPI"}` }).save();
+
+    return res.status(200).json({ success: true, message: "Tuition fee invoice paid successfully via online checkout", fee: feeInvoice });
+  } catch (error) {
+    console.error("Student Payment Error:", error);
+    return res.status(500).json({ success: false, message: "Internal failure occurred during online payment" });
   }
 });
 
