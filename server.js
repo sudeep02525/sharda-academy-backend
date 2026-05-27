@@ -13,7 +13,15 @@ const PORT = process.env.PORT || 5000;
 
 // Enable CORS requests for portal servers
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" })); // Increase JSON body limit for files
+
+// Ensure physical uploads folder exists
+import fs from "fs";
+const uploadsDir = "./uploads";
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+app.use("/uploads", express.static("uploads"));
 
 // Bind API endpoint routers
 app.use("/api/auth", authRoutes);

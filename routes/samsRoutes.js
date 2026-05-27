@@ -1,4 +1,6 @@
 import express from "express";
+import fs from "fs";
+import path from "path";
 import User from "../models/User.js";
 import Attendance from "../models/Attendance.js";
 import Notice from "../models/Notice.js";
@@ -7,9 +9,46 @@ import Timetable from "../models/Timetable.js";
 import Result from "../models/Result.js";
 import Inquiry from "../models/Inquiry.js";
 import ActivityLog from "../models/ActivityLog.js";
+import Homework from "../models/Homework.js";
+import StudyMaterial from "../models/StudyMaterial.js";
+import { 
+  sendNoticeBulkEmail, 
+  sendHomeworkBulkEmail, 
+  sendFeeReminderEmail, 
+  sendExamAlertEmail 
+} from "../utils/mailer.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+
+// Helper to save Base64 data as a physical file on the server and return static relative URL
+const saveBase64File = (base64String, originalName) => {
+  if (!base64String || !base64String.startsWith("data:")) {
+    return base64String || "";
+  }
+  try {
+    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return base64String;
+    }
+    const fileBuffer = Buffer.from(matches[2], 'base64');
+    const ext = path.extname(originalName) || '.pdf';
+    const baseName = path.basename(originalName, ext).replace(/[^a-zA-Z0-9]/g, '_');
+    const uniqueName = `${baseName}_${Date.now()}${ext}`;
+    
+    // Ensure folder path exists
+    const uploadsDir = "./uploads";
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir);
+    }
+    
+    fs.writeFileSync(path.join(uploadsDir, uniqueName), fileBuffer);
+    return `/uploads/${uniqueName}`;
+  } catch (err) {
+    console.error("⚠️ Failed to write base64 file to server:", err.message);
+    return "";
+  }
+};
 
 // ==========================================
 // 📶 1. BIOMETRIC ATTENDANCE HARDWARE SYNC API
@@ -120,6 +159,18 @@ router.get("/student/dashboard", protect, restrictTo("student"), async (req, res
     // Fetch exam results
     const examResults = await Result.find({ studentId }).sort({ createdAt: -1 });
 
+    // Fetch real homework assignments
+    const homework = await Homework.find({
+      classLevel: studentDetails.classLevel,
+      batch: studentDetails.batch,
+    }).sort({ dueDate: 1 });
+
+    // Fetch real study materials notes/worksheets
+    const studyMaterials = await StudyMaterial.find({
+      classLevel: studentDetails.classLevel,
+      $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }],
+    }).sort({ createdAt: -1 });
+
     return res.status(200).json({
       success: true,
       student: studentDetails,
@@ -128,6 +179,8 @@ router.get("/student/dashboard", protect, restrictTo("student"), async (req, res
       timetable,
       fees: feeBills,
       results: examResults,
+      homework,
+      studyMaterials,
     });
   } catch (error) {
     console.error("Student Dashboard Fetch Error:", error);
@@ -218,7 +271,11 @@ router.get("/admin/analytics", protect, restrictTo("admin"), async (req, res) =>
 
 // Admin: Register a Student or Admin
 router.post("/admin/users", protect, restrictTo("admin"), async (req, res) => {
-  const { name, email, phone, role, password, rollNumber, classLevel, batch, biometricId, parentEmail } = req.body;
+  const { 
+    name, email, phone, role, password, rollNumber, classLevel, batch, biometricId, parentEmail,
+    dob, gender, bloodGroup, aadhaarNo, homeAddress, fatherName, fatherPhone, motherName, motherPhone,
+    profilePhoto, status
+  } = req.body;
 
   if (!name || !email || !phone || !role) {
     return res.status(400).json({ success: false, message: "Name, email, phone, and role indicators are required" });
@@ -228,6 +285,11 @@ router.post("/admin/users", protect, restrictTo("admin"), async (req, res) => {
     const userExists = await User.findOne({ email: email.toLowerCase() });
     if (userExists) {
       return res.status(400).json({ success: false, message: "An account with this email is already registered" });
+    }
+
+    let savedPhotoUrl = "";
+    if (profilePhoto) {
+      savedPhotoUrl = saveBase64File(profilePhoto, "profile.jpg");
     }
 
     const newUser = new User({
@@ -241,6 +303,17 @@ router.post("/admin/users", protect, restrictTo("admin"), async (req, res) => {
       batch,
       biometricId: biometricId || null,
       parentEmail: parentEmail ? parentEmail.toLowerCase() : "",
+      dob: dob || "",
+      gender: gender || "",
+      bloodGroup: bloodGroup || "",
+      aadhaarNo: aadhaarNo || "",
+      homeAddress: homeAddress || "",
+      fatherName: fatherName || "",
+      fatherPhone: fatherPhone || "",
+      motherName: motherName || "",
+      motherPhone: motherPhone || "",
+      profilePhoto: savedPhotoUrl,
+      status: status || "Active"
     });
 
     await newUser.save();
@@ -264,6 +337,10 @@ router.put("/admin/users/:id", protect, restrictTo("admin"), async (req, res) =>
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: "Target account not found" });
+    }
+
+    if (updates.profilePhoto && updates.profilePhoto.startsWith("data:")) {
+      updates.profilePhoto = saveBase64File(updates.profilePhoto, "profile.jpg");
     }
 
     Object.keys(updates).forEach((key) => {
@@ -430,10 +507,26 @@ router.post("/admin/results", protect, restrictTo("admin"), async (req, res) => 
     await result.save();
 
     const student = await User.findById(studentId);
+    
     // Audit Log Activity
     await new ActivityLog({ action: `Uploaded exam scores sheet of '${examName}' for '${student?.name}'` }).save();
 
-    return res.status(201).json({ success: true, message: "Exam result sheet registered successfully", result });
+    // Trigger SMTP email card
+    if (student) {
+      const resultsSummary = result.marks.map(m => `${m.subject}: ${m.obtained}/${m.max}`).join(", ");
+      const emails = [student.email, student.parentEmail].filter(Boolean);
+      if (emails.length > 0) {
+        for (const email of emails) {
+          try {
+            await sendExamAlertEmail(email, student.name, examName, resultsSummary, result.percentage, result.grade);
+          } catch (mailErr) {
+            console.error("⚠️ Marks email dispatch failed:", mailErr.message);
+          }
+        }
+      }
+    }
+
+    return res.status(201).json({ success: true, message: "Exam result sheet registered and email alerts dispatched successfully", result });
   } catch (error) {
     console.error("Result Upload Error:", error);
     return res.status(500).json({ success: false, message: "Failed to submit marks result record" });
@@ -460,7 +553,20 @@ router.post("/admin/notices", protect, restrictTo("admin"), async (req, res) => 
     // Audit Log Activity
     await new ActivityLog({ action: `Broadcasted general alert bulletin: '${title}'` }).save();
 
-    return res.status(201).json({ success: true, message: "Notice bulletin broadcasted successfully", notice });
+    // Fetch all students/parents and dispatch notice bulk emails
+    try {
+      const users = await User.find({ role: "student" });
+      const emails = users.map(u => u.email).filter(Boolean);
+      const parentEmails = users.map(u => u.parentEmail).filter(Boolean);
+      const allEmails = [...new Set([...emails, ...parentEmails])];
+      if (allEmails.length > 0) {
+        await sendNoticeBulkEmail(allEmails, title, content);
+      }
+    } catch (mailErr) {
+      console.error("⚠️ Notice bulk email dispatch failed:", mailErr.message);
+    }
+
+    return res.status(201).json({ success: true, message: "Notice bulletin broadcasted and email notifications dispatched", notice });
   } catch (error) {
     console.error("Notice Upload Error:", error);
     return res.status(500).json({ success: false, message: "Failed to broadcast notice message" });
@@ -492,6 +598,207 @@ router.put("/admin/admissions/:id", protect, restrictTo("admin"), async (req, re
   } catch (error) {
     console.error("Approve Admission Error:", error);
     return res.status(500).json({ success: false, message: "Failed to update admissions inquiry status" });
+  }
+});
+
+// ==========================================
+// 📚 3. NEW HOMEWORK MANAGEMENT ENDPOINTS
+// ==========================================
+
+// Admin: Upload homework assignment
+router.post("/admin/homework", protect, restrictTo("admin"), async (req, res) => {
+  const { title, description, subject, classLevel, batch, dueDate, attachmentName, attachmentData, teacherName } = req.body;
+  if (!title || !subject || !classLevel || !batch || !dueDate || !teacherName) {
+    return res.status(400).json({ success: false, message: "Missing required homework parameters" });
+  }
+  try {
+    const homework = new Homework({
+      title,
+      description: description || "",
+      subject,
+      classLevel: parseInt(classLevel),
+      batch,
+      dueDate,
+      attachmentName: attachmentName || "",
+      attachmentData: saveBase64File(attachmentData, attachmentName),
+      teacherName,
+    });
+    await homework.save();
+
+    await new ActivityLog({ action: `Uploaded homework assignment '${title}' for Std ${classLevel} (${batch})` }).save();
+
+    // Fetch all students in this class level and batch to send them a bulk email
+    try {
+      const students = await User.find({ role: "student", classLevel: parseInt(classLevel), batch });
+      const emails = students.map(s => s.email).filter(Boolean);
+      const parentEmails = students.map(s => s.parentEmail).filter(Boolean);
+      const allRecipients = [...new Set([...emails, ...parentEmails])];
+
+      if (allRecipients.length > 0) {
+        await sendHomeworkBulkEmail(allRecipients, title, subject, dueDate);
+      }
+    } catch (mailErr) {
+      console.error("⚠️ Homework email dispatch failed:", mailErr.message);
+    }
+
+    return res.status(201).json({ success: true, message: "Homework assignment uploaded successfully", homework });
+  } catch (err) {
+    console.error("Homework Upload Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to upload homework assignment" });
+  }
+});
+
+// Admin: Fetch all homework assignments
+router.get("/admin/homework", protect, restrictTo("admin"), async (req, res) => {
+  try {
+    const homeworks = await Homework.find().sort({ createdAt: -1 });
+    return res.status(200).json({ success: true, homeworks });
+  } catch (err) {
+    console.error("Fetch Homeworks Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch homework assignments" });
+  }
+});
+
+// Admin: Delete homework assignment
+router.delete("/admin/homework/:id", protect, restrictTo("admin"), async (req, res) => {
+  try {
+    await Homework.findByIdAndDelete(req.params.id);
+    await new ActivityLog({ action: `Deleted homework assignment ID: ${req.params.id}` }).save();
+    return res.status(200).json({ success: true, message: "Homework assignment deleted successfully" });
+  } catch (err) {
+    console.error("Delete Homework Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to delete homework assignment" });
+  }
+});
+
+// ==========================================
+// 📓 4. NEW STUDY MATERIAL MANAGEMENT ENDPOINTS
+// ==========================================
+
+// Admin: Upload study material
+router.post("/admin/study-materials", protect, restrictTo("admin"), async (req, res) => {
+  const { title, description, subject, classLevel, batch, materialType, attachmentName, attachmentData, pages, fileSize } = req.body;
+  if (!title || !subject || !classLevel) {
+    return res.status(400).json({ success: false, message: "Title, Subject and Class Level are required" });
+  }
+  try {
+    const material = new StudyMaterial({
+      title,
+      description: description || "",
+      subject,
+      classLevel: parseInt(classLevel),
+      batch: batch || "All Batches",
+      materialType: materialType || "Notes",
+      attachmentName: attachmentName || "",
+      attachmentData: saveBase64File(attachmentData, attachmentName),
+      pages: pages || "",
+      fileSize: fileSize || "",
+    });
+    await material.save();
+
+    await new ActivityLog({ action: `Uploaded study material notes '${title}' for Std ${classLevel}` }).save();
+    return res.status(201).json({ success: true, message: "Study material notes uploaded successfully", material });
+  } catch (err) {
+    console.error("Study Material Upload Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to upload study material" });
+  }
+});
+
+// Admin: Fetch all study materials
+router.get("/admin/study-materials", protect, restrictTo("admin"), async (req, res) => {
+  try {
+    const materials = await StudyMaterial.find().sort({ createdAt: -1 });
+    return res.status(200).json({ success: true, materials });
+  } catch (err) {
+    console.error("Fetch Study Materials Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch study materials" });
+  }
+});
+
+// Admin: Delete study material
+router.delete("/admin/study-materials/:id", protect, restrictTo("admin"), async (req, res) => {
+  try {
+    await StudyMaterial.findByIdAndDelete(req.params.id);
+    await new ActivityLog({ action: `Deleted study material ID: ${req.params.id}` }).save();
+    return res.status(200).json({ success: true, message: "Study material deleted successfully" });
+  } catch (err) {
+    console.error("Delete Study Material Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to delete study material" });
+  }
+});
+
+// ==========================================
+// 🖊️ 5. NEW MANUAL ATTENDANCE MANAGEMENT ENDPOINTS
+// ==========================================
+
+// Admin: Mark attendance manually
+router.post("/admin/attendance", protect, restrictTo("admin"), async (req, res) => {
+  const { studentId, date, status, checkInTime, checkOutTime } = req.body;
+  if (!studentId || !date || !status) {
+    return res.status(400).json({ success: false, message: "Student, Date, and Status are required" });
+  }
+  try {
+    let attendance = await Attendance.findOne({ studentId, date });
+    if (attendance) {
+      attendance.status = status;
+      if (checkInTime) attendance.checkInTime = checkInTime;
+      if (checkOutTime) attendance.checkOutTime = checkOutTime;
+      attendance.method = "Manual";
+      await attendance.save();
+    } else {
+      attendance = new Attendance({
+        studentId,
+        date,
+        status,
+        method: "Manual",
+        checkInTime: checkInTime || "09:00 AM",
+        checkOutTime: checkOutTime || "04:00 PM",
+        deviceName: "Manual ERP Dashboard",
+      });
+      await attendance.save();
+    }
+
+    const student = await User.findById(studentId);
+    await new ActivityLog({ action: `Manually marked attendance for '${student?.name}' as '${status}' on ${date}` }).save();
+    return res.status(200).json({ success: true, message: "Attendance status saved successfully", attendance });
+  } catch (err) {
+    console.error("Manual Attendance Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to save attendance record" });
+  }
+});
+
+// ==========================================
+// 🪙 6. NEW TRANSACT FEE PAYMENT REMINDER ENDPOINT
+// ==========================================
+
+// Admin: Trigger transactional fee payment reminder email to parent and student
+router.post("/admin/fees/remind/:id", protect, restrictTo("admin"), async (req, res) => {
+  try {
+    const feeInvoice = await Fee.findById(req.params.id);
+    if (!feeInvoice) {
+      return res.status(404).json({ success: false, message: "Invoice record not found" });
+    }
+    const student = await User.findById(feeInvoice.studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Associated student not found" });
+    }
+
+    const emails = [student.email, student.parentEmail].filter(Boolean);
+    if (emails.length > 0) {
+      for (const email of emails) {
+        try {
+          await sendFeeReminderEmail(email, student.name, feeInvoice.invoiceId, feeInvoice.amount, feeInvoice.dueDate);
+        } catch (mailErr) {
+          console.error(`⚠️ Fee email alert failed for ${email}:`, mailErr.message);
+        }
+      }
+    }
+
+    await new ActivityLog({ action: `Sent fee invoice payment reminder for '${feeInvoice.invoiceId}' to student/parent` }).save();
+    return res.status(200).json({ success: true, message: `Fee payment reminder sent successfully to student and parent` });
+  } catch (err) {
+    console.error("Fee Reminder Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to dispatch reminder notification email" });
   }
 });
 

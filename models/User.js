@@ -71,6 +71,51 @@ const UserSchema = new mongoose.Schema(
       lowercase: true,
       default: "",
     },
+    dob: {
+      type: String,
+      default: "",
+    },
+    gender: {
+      type: String,
+      default: "",
+    },
+    bloodGroup: {
+      type: String,
+      default: "",
+    },
+    aadhaarNo: {
+      type: String,
+      default: "",
+    },
+    homeAddress: {
+      type: String,
+      default: "",
+    },
+    fatherName: {
+      type: String,
+      default: "",
+    },
+    fatherPhone: {
+      type: String,
+      default: "",
+    },
+    motherName: {
+      type: String,
+      default: "",
+    },
+    motherPhone: {
+      type: String,
+      default: "",
+    },
+    profilePhoto: {
+      type: String,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["Active", "Inactive"],
+      default: "Active",
+    },
   },
   {
     timestamps: true,
