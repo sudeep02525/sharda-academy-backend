@@ -120,6 +120,10 @@ const UserSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    profilePhotoFilename: {
+      type: String,
+      default: "",
+    },
     accountStatus: {
       type: Boolean,
       default: true,

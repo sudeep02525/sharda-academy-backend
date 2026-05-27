@@ -3,24 +3,18 @@ import path from "path";
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 
-// Helper to save Base64 data as a physical file and return a static URL
-const saveBase64File = (base64String, originalName) => {
-  if (!base64String || !base64String.startsWith("data:")) {
-    return base64String || "";
-  }
+// Helper to delete old upload files safely from disk
+const deleteUploadedFile = (filePath) => {
+  if (!filePath) return;
   try {
-    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) return base64String;
-    const fileBuffer = Buffer.from(matches[2], "base64");
-    const ext = path.extname(originalName || "profile.jpg") || ".jpg";
-    const uniqueName = `profile_${Date.now()}${ext}`;
-    const uploadsDir = "./uploads";
-    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-    fs.writeFileSync(path.join(uploadsDir, uniqueName), fileBuffer);
-    return `/uploads/${uniqueName}`;
+    const normalizedPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
+    const absolutePath = path.resolve(normalizedPath);
+    if (fs.existsSync(absolutePath)) {
+      fs.unlinkSync(absolutePath);
+      console.log(`Successfully deleted old file: ${absolutePath}`);
+    }
   } catch (err) {
-    console.error("Failed to save profile photo:", err.message);
-    return "";
+    console.error("Failed to delete file:", err.message);
   }
 };
 
@@ -39,18 +33,27 @@ export const addStudent = async (req, res) => {
     address,
     password,
     parentEmail,
-    profilePhoto,
   } = req.body;
 
   try {
     // Check if email already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      if (req.file) {
+        deleteUploadedFile(`/uploads/images/${req.file.filename}`);
+      }
       return res.status(400).json({ success: false, message: "Email already registered" });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password || "12345678", 10);
+
+    let savedPhotoUrl = "";
+    let photoFilename = "";
+    if (req.file) {
+      savedPhotoUrl = `/uploads/images/${req.file.filename}`;
+      photoFilename = req.file.filename;
+    }
 
     // Create new student
     const student = await User.create({
@@ -64,7 +67,8 @@ export const addStudent = async (req, res) => {
       address,
       password: hashedPassword,
       parentEmail: parentEmail || "",
-      profilePhoto: profilePhoto ? saveBase64File(profilePhoto, "profile.jpg") : "",
+      profilePhoto: savedPhotoUrl,
+      profilePhotoFilename: photoFilename,
       role: "student",
       accountStatus: true,
     });
@@ -83,6 +87,9 @@ export const addStudent = async (req, res) => {
       },
     });
   } catch (error) {
+    if (req.file) {
+      deleteUploadedFile(`/uploads/images/${req.file.filename}`);
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -109,6 +116,9 @@ export const updateStudent = async (req, res) => {
     const student = await User.findById(id);
 
     if (!student || student.role !== "student") {
+      if (req.file) {
+        deleteUploadedFile(`/uploads/images/${req.file.filename}`);
+      }
       return res.status(404).json({ success: false, message: "Student not found" });
     }
 
@@ -122,7 +132,22 @@ export const updateStudent = async (req, res) => {
     if (rollNumber) student.rollNumber = rollNumber;
     if (address) student.address = address;
     if (parentEmail) student.parentEmail = parentEmail;
-    if (profilePhoto) student.profilePhoto = saveBase64File(profilePhoto, "profile.jpg");
+    
+    if (req.file) {
+      // If student already has a photo, delete the old file
+      if (student.profilePhoto) {
+        deleteUploadedFile(student.profilePhoto);
+      }
+      student.profilePhoto = `/uploads/images/${req.file.filename}`;
+      student.profilePhotoFilename = req.file.filename;
+    } else if (profilePhoto === "") {
+      // Explicitly clear photo
+      if (student.profilePhoto) {
+        deleteUploadedFile(student.profilePhoto);
+      }
+      student.profilePhoto = "";
+      student.profilePhotoFilename = "";
+    }
 
     await student.save();
 
@@ -132,6 +157,9 @@ export const updateStudent = async (req, res) => {
       data: student,
     });
   } catch (error) {
+    if (req.file) {
+      deleteUploadedFile(`/uploads/images/${req.file.filename}`);
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };

@@ -15,13 +15,23 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json({ limit: "50mb" })); // Increase JSON body limit for files
 
-// Ensure physical uploads folder exists
+import path from "path";
+import { fileURLToPath } from "url";
 import fs from "fs";
-const uploadsDir = "./uploads";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Ensure physical uploads folder and images subfolder exist
+const uploadsDir = path.join(__dirname, "uploads");
+const imagesDir = path.join(uploadsDir, "images");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
-app.use("/uploads", express.static("uploads"));
+if (!fs.existsSync(imagesDir)) {
+  fs.mkdirSync(imagesDir);
+}
+app.use("/uploads", express.static(uploadsDir));
 
 // Bind API endpoint routers
 app.use("/api/auth", authRoutes);

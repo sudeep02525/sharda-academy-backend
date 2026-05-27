@@ -19,7 +19,23 @@ import {
   sendExamAlertEmail 
 } from "../utils/mailer.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
+import { uploadProfilePhoto } from "../middleware/uploadMiddleware.js";
 import * as StudentAdminController from "../controllers/StudentAdminController.js";
+
+// Helper to delete old upload files safely from disk
+const deleteUploadedFile = (filePath) => {
+  if (!filePath) return;
+  try {
+    const normalizedPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
+    const absolutePath = path.resolve(normalizedPath);
+    if (fs.existsSync(absolutePath)) {
+      fs.unlinkSync(absolutePath);
+      console.log(`Successfully deleted old file: ${absolutePath}`);
+    }
+  } catch (err) {
+    console.error("Failed to delete file:", err.message);
+  }
+};
 import * as AttendanceAdminController from "../controllers/AttendanceAdminController.js";
 import * as HomeworkAdminController from "../controllers/HomeworkAdminController.js";
 import * as StudyMaterialAdminController from "../controllers/StudyMaterialAdminController.js";
@@ -197,6 +213,35 @@ router.get("/student/dashboard", protect, restrictTo("student"), async (req, res
   }
 });
 
+// Student: Change own password
+router.post("/student/change-password", protect, restrictTo("student"), async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ success: false, message: "Current and new passwords are required" });
+  }
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Student account not found" });
+    }
+    // Verify current password
+    const isMatch = bcryptjs.compareSync(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: "Invalid current password" });
+    }
+    // Hash and save new password
+    const salt = bcryptjs.genSaltSync(10);
+    user.password = bcryptjs.hashSync(newPassword, salt);
+    await user.save();
+    
+    await new ActivityLog({ action: `Student '${user.name}' changed their security password` }).save();
+    return res.status(200).json({ success: true, message: "Your security password has been changed successfully!" });
+  } catch (error) {
+    console.error("Change Password Backend Error:", error);
+    return res.status(500).json({ success: false, message: "Failed to update password" });
+  }
+});
+
 // ==========================================
 // 📥 3. PUBLIC ADMISSIONS INQUIRY WEBHOOK
 // ==========================================
@@ -279,26 +324,34 @@ router.get("/admin/analytics", protect, restrictTo("admin"), async (req, res) =>
 });
 
 // Admin: Register a Student or Admin
-router.post("/admin/users", protect, restrictTo("admin"), async (req, res) => {
+router.post("/admin/users", protect, restrictTo("admin"), uploadProfilePhoto, async (req, res) => {
   const { 
     name, email, phone, role, password, rollNumber, classLevel, batch, biometricId, parentEmail,
     dob, gender, bloodGroup, aadhaarNo, homeAddress, fatherName, fatherPhone, motherName, motherPhone,
-    profilePhoto, status
+    status
   } = req.body;
 
   if (!name || !email || !phone || !role) {
+    if (req.file) {
+      deleteUploadedFile(`/uploads/images/${req.file.filename}`);
+    }
     return res.status(400).json({ success: false, message: "Name, email, phone, and role indicators are required" });
   }
 
   try {
     const userExists = await User.findOne({ email: email.toLowerCase() });
     if (userExists) {
+      if (req.file) {
+        deleteUploadedFile(`/uploads/images/${req.file.filename}`);
+      }
       return res.status(400).json({ success: false, message: "An account with this email is already registered" });
     }
 
     let savedPhotoUrl = "";
-    if (profilePhoto) {
-      savedPhotoUrl = saveBase64File(profilePhoto, "profile.jpg");
+    let photoFilename = "";
+    if (req.file) {
+      savedPhotoUrl = `/uploads/images/${req.file.filename}`;
+      photoFilename = req.file.filename;
     }
 
     const salt = bcryptjs.genSaltSync(10);
@@ -311,7 +364,7 @@ router.post("/admin/users", protect, restrictTo("admin"), async (req, res) => {
       role,
       password: hashedPassword,
       rollNumber,
-      classLevel,
+      classLevel: classLevel ? parseInt(classLevel) : null,
       batch,
       biometricId: biometricId || null,
       parentEmail: parentEmail ? parentEmail.toLowerCase() : "",
@@ -325,6 +378,7 @@ router.post("/admin/users", protect, restrictTo("admin"), async (req, res) => {
       motherName: motherName || "",
       motherPhone: motherPhone || "",
       profilePhoto: savedPhotoUrl,
+      profilePhotoFilename: photoFilename,
       status: status || "Active"
     });
 
@@ -335,27 +389,45 @@ router.post("/admin/users", protect, restrictTo("admin"), async (req, res) => {
 
     return res.status(201).json({ success: true, message: `Account registered successfully for '${name}' as '${role}'`, user: newUser });
   } catch (error) {
+    if (req.file) {
+      deleteUploadedFile(`/uploads/images/${req.file.filename}`);
+    }
     console.error("Register User Error:", error);
     return res.status(500).json({ success: false, message: "Internal failure creating user record" });
   }
 });
 
 // Admin: Modify/Update User details
-router.put("/admin/users/:id", protect, restrictTo("admin"), async (req, res) => {
+router.put("/admin/users/:id", protect, restrictTo("admin"), uploadProfilePhoto, async (req, res) => {
   const userId = req.params.id;
   const updates = req.body;
 
   try {
     const user = await User.findById(userId);
     if (!user) {
+      if (req.file) {
+        deleteUploadedFile(`/uploads/images/${req.file.filename}`);
+      }
       return res.status(404).json({ success: false, message: "Target account not found" });
     }
 
-    if (updates.profilePhoto && updates.profilePhoto.startsWith("data:")) {
-      updates.profilePhoto = saveBase64File(updates.profilePhoto, "profile.jpg");
+    if (req.file) {
+      if (user.profilePhoto) {
+        deleteUploadedFile(user.profilePhoto);
+      }
+      user.profilePhoto = `/uploads/images/${req.file.filename}`;
+      user.profilePhotoFilename = req.file.filename;
+    } else if (updates.profilePhoto === "") {
+      if (user.profilePhoto) {
+        deleteUploadedFile(user.profilePhoto);
+      }
+      user.profilePhoto = "";
+      user.profilePhotoFilename = "";
     }
 
     Object.keys(updates).forEach((key) => {
+      // Skip profilePhoto since it is handled separately
+      if (key === "profilePhoto") return;
       if (updates[key] !== undefined && updates[key] !== "") {
         if (key === "email" || key === "parentEmail") {
           user[key] = updates[key].toLowerCase();
@@ -375,6 +447,9 @@ router.put("/admin/users/:id", protect, restrictTo("admin"), async (req, res) =>
 
     return res.status(200).json({ success: true, message: "Account record updated successfully", user });
   } catch (error) {
+    if (req.file) {
+      deleteUploadedFile(`/uploads/images/${req.file.filename}`);
+    }
     console.error("Update User Error:", error);
     return res.status(500).json({ success: false, message: "Internal failure updating user details" });
   }
@@ -533,10 +608,10 @@ router.post("/admin/fees/remind/:id", protect, restrictTo("admin"), async (req, 
 // ==========================================
 // 👨‍🎓 ADMIN STUDENT MANAGEMENT
 // ==========================================
-router.post("/admin/students", protect, restrictTo("admin"), StudentAdminController.addStudent);
+router.post("/admin/students", protect, restrictTo("admin"), uploadProfilePhoto, StudentAdminController.addStudent);
 router.get("/admin/students", protect, restrictTo("admin"), StudentAdminController.getAllStudents);
 router.get("/admin/students/:id", protect, restrictTo("admin"), StudentAdminController.getStudentById);
-router.put("/admin/students/:id", protect, restrictTo("admin"), StudentAdminController.updateStudent);
+router.put("/admin/students/:id", protect, restrictTo("admin"), uploadProfilePhoto, StudentAdminController.updateStudent);
 router.delete("/admin/students/:id", protect, restrictTo("admin"), StudentAdminController.deleteStudent);
 router.put("/admin/students/:id/deactivate", protect, restrictTo("admin"), StudentAdminController.deactivateStudent);
 router.put("/admin/students/:id/activate", protect, restrictTo("admin"), StudentAdminController.activateStudent);
