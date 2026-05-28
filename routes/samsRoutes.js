@@ -175,7 +175,7 @@ router.get("/student/dashboard", protect, restrictTo("student"), async (req, res
     // Fetch timetable schedules
     const timetable = await Timetable.find({
       classLevel: studentDetails.classLevel,
-      batch: studentDetails.batch,
+      $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }, { batch: "All" }],
     });
 
     // Fetch tuition bills
@@ -187,13 +187,13 @@ router.get("/student/dashboard", protect, restrictTo("student"), async (req, res
     // Fetch real homework assignments
     const homework = await Homework.find({
       classLevel: studentDetails.classLevel,
-      batch: studentDetails.batch,
+      $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }, { batch: "All" }],
     }).sort({ dueDate: 1 });
 
     // Fetch real study materials notes/worksheets
     const studyMaterials = await StudyMaterial.find({
       classLevel: studentDetails.classLevel,
-      $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }],
+      $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }, { batch: "All" }],
     }).sort({ createdAt: -1 });
 
     return res.status(200).json({
