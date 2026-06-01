@@ -163,38 +163,36 @@ router.get("/student/dashboard", protect, restrictTo("student"), async (req, res
   try {
     const studentId = req.user._id;
 
-    // Fetch personal details
+    // 1. Fetch personal details first (needed for classLevel filters)
     const studentDetails = await User.findById(studentId).select("-password");
 
-    // Fetch attendance log
-    const attendanceLogs = await Attendance.find({ studentId }).sort({ date: -1 }).limit(30);
-
-    // Fetch notices for Student role and General
-    const notices = await Notice.find({ category: { $in: ["General", "Student"] } }).sort({ date: -1 }).limit(10);
-
-    // Fetch timetable schedules
-    const timetable = await Timetable.find({
-      classLevel: studentDetails.classLevel,
-      $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }, { batch: "All" }],
-    });
-
-    // Fetch tuition bills
-    const feeBills = await Fee.find({ studentId }).sort({ dueDate: -1 });
-
-    // Fetch exam results
-    const examResults = await Result.find({ studentId }).sort({ createdAt: -1 });
-
-    // Fetch real homework assignments
-    const homework = await Homework.find({
-      classLevel: studentDetails.classLevel,
-      $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }, { batch: "All" }],
-    }).sort({ dueDate: 1 });
-
-    // Fetch real study materials notes/worksheets
-    const studyMaterials = await StudyMaterial.find({
-      classLevel: studentDetails.classLevel,
-      $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }, { batch: "All" }],
-    }).sort({ createdAt: -1 });
+    // 2. Run independent queries concurrently for faster dashboard load
+    const [
+      attendanceLogs,
+      notices,
+      timetable,
+      feeBills,
+      examResults,
+      homework,
+      studyMaterials
+    ] = await Promise.all([
+      Attendance.find({ studentId }).sort({ date: -1 }).limit(30),
+      Notice.find({ category: { $in: ["General", "Student"] } }).sort({ date: -1 }).limit(10),
+      Timetable.find({
+        classLevel: studentDetails.classLevel,
+        $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }, { batch: "All" }],
+      }),
+      Fee.find({ studentId }).sort({ dueDate: -1 }),
+      Result.find({ studentId }).sort({ createdAt: -1 }),
+      Homework.find({
+        classLevel: studentDetails.classLevel,
+        $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }, { batch: "All" }],
+      }).sort({ dueDate: 1 }),
+      StudyMaterial.find({
+        classLevel: studentDetails.classLevel,
+        $or: [{ batch: studentDetails.batch }, { batch: "All Batches" }, { batch: "" }, { batch: "All" }],
+      }).sort({ createdAt: -1 })
+    ]);
 
     return res.status(200).json({
       success: true,
@@ -281,24 +279,33 @@ router.post("/admissions-inquiry", async (req, res) => {
 // Admin: Analytics & Dashboards
 router.get("/admin/analytics", protect, restrictTo("admin"), async (req, res) => {
   try {
-    const usersCount = await User.countDocuments();
-    const studentsCount = await User.countDocuments({ role: "student" });
-    const adminCount = await User.countDocuments({ role: "admin" });
-    const inquiryCount = await Inquiry.countDocuments();
+    // Run admin queries concurrently
+    const [
+      usersCount,
+      studentsCount,
+      adminCount,
+      inquiryCount,
+      recentNotices,
+      recentSyncLogs,
+      invoiceBills,
+      allUsers,
+      admissionsInquiries,
+      activityAudits
+    ] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ role: "student" }),
+      User.countDocuments({ role: "admin" }),
+      Inquiry.countDocuments(),
+      Notice.find().sort({ date: -1 }).limit(10),
+      Attendance.find().populate("studentId", "name rollNumber classLevel").sort({ createdAt: -1 }).limit(30),
+      Fee.find().populate("studentId", "name rollNumber"),
+      User.find().select("-password"),
+      Inquiry.find().sort({ createdAt: -1 }),
+      ActivityLog.find().sort({ createdAt: -1 }).limit(30)
+    ]);
 
-    // Fetch modern charts parameters
-    const recentNotices = await Notice.find().sort({ date: -1 }).limit(10);
-    const recentSyncLogs = await Attendance.find().populate("studentId", "name rollNumber classLevel").sort({ createdAt: -1 }).limit(30);
-
-    const invoiceBills = await Fee.find().populate("studentId", "name rollNumber");
     const unpaidFees = invoiceBills.filter((bill) => bill.status === "Unpaid").reduce((sum, bill) => sum + bill.amount, 0);
     const paidFees = invoiceBills.filter((bill) => bill.status === "Paid").reduce((sum, bill) => sum + bill.amount, 0);
-
-    const allUsers = await User.find().select("-password");
-
-    // Fetch new CRM logs
-    const admissionsInquiries = await Inquiry.find().sort({ createdAt: -1 });
-    const activityAudits = await ActivityLog.find().sort({ createdAt: -1 }).limit(30);
 
     return res.status(200).json({
       success: true,
