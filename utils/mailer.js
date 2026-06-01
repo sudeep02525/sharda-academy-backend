@@ -36,7 +36,7 @@ export const sendOTPEmail = async (toEmail, otp, type = "registration") => {
 
   const subject = isRegistration
     ? "🎓 Sharda Academy – Your Registration Verification Code"
-    : "🔑 Sharda Academy – Password Recovery Code";
+    : "Sharda Academy – Password Recovery Code";
 
   const actionText = isRegistration
     ? "You are registering on the <strong>Sharda Academy Student Portal</strong>. Enter the code below to verify your email and activate your account:"

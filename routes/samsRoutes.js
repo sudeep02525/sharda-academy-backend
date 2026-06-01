@@ -333,8 +333,8 @@ router.get("/admin/analytics", protect, restrictTo("admin"), async (req, res) =>
 // Admin: Register a Student or Admin
 router.post("/admin/users", protect, restrictTo("admin"), uploadProfilePhoto, async (req, res) => {
   const { 
-    name, email, phone, role, password, rollNumber, classLevel, batch, biometricId, parentEmail,
-    dob, gender, bloodGroup, aadhaarNo, homeAddress, fatherName, fatherPhone, motherName, motherPhone,
+    name, email, phone, role, password, rollNumber, classLevel, batch, stream, subjects, biometricId, parentEmail,
+    dob, gender, bloodGroup, aadhaarNo, homeAddress, fatherName, fatherPhone, fatherEmail, motherName, motherPhone, motherEmail,
     status
   } = req.body;
 
@@ -373,6 +373,8 @@ router.post("/admin/users", protect, restrictTo("admin"), uploadProfilePhoto, as
       rollNumber,
       classLevel: classLevel ? parseInt(classLevel) : null,
       batch,
+      stream,
+      subjects,
       biometricId: biometricId || null,
       parentEmail: parentEmail ? parentEmail.toLowerCase() : "",
       dob: dob || "",
@@ -382,8 +384,10 @@ router.post("/admin/users", protect, restrictTo("admin"), uploadProfilePhoto, as
       homeAddress: homeAddress || "",
       fatherName: fatherName || "",
       fatherPhone: fatherPhone || "",
+      fatherEmail: fatherEmail || "",
       motherName: motherName || "",
       motherPhone: motherPhone || "",
+      motherEmail: motherEmail || "",
       profilePhoto: savedPhotoUrl,
       profilePhotoFilename: photoFilename,
       status: status || "Active"

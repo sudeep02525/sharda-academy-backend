@@ -54,7 +54,18 @@ const UserSchema = new mongoose.Schema(
       max: 12,
       default: null,
     },
+
     batch: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    stream: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    subjects: {
       type: String,
       trim: true,
       default: "",
@@ -114,6 +125,18 @@ const UserSchema = new mongoose.Schema(
     },
     motherPhone: {
       type: String,
+      default: "",
+    },
+    fatherEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+    },
+    motherEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
       default: "",
     },
     profilePhoto: {
