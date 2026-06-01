@@ -114,7 +114,7 @@ router.post("/forgot-password", async (req, res) => {
     }
 
     const otp = generateOTP();
-    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+    const expires = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
 
     user.otp = otp;
     user.otpExpires = expires;
@@ -123,7 +123,7 @@ router.post("/forgot-password", async (req, res) => {
     console.log(`\n==============================================`);
     console.log(`📧 [PASSWORD RECOVERY] OTP generated for: ${email}`);
     console.log(`🔑 Recovery Code: ${otp}`);
-    console.log(`⏳ Code expires in 10 minutes`);
+    console.log(`⏳ Code expires in 5 minutes`);
     console.log(`==============================================\n`);
 
     // Send real email

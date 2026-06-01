@@ -82,13 +82,12 @@ export const sendOTPEmail = async (toEmail, otp, type = "registration") => {
                     <p style="color:#1a2e5a;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin:0 0 16px;">Your Verification Code</p>
                     <table cellpadding="0" cellspacing="6">
                       <tr>
-                        ${otp.split("").map(d => `
-                        <td style="background:#1a2e5a;border-radius:10px;width:44px;height:56px;text-align:center;vertical-align:middle;">
-                          <span style="color:#f5c842;font-size:28px;font-weight:900;font-family:'Courier New',monospace;line-height:1;">${d}</span>
-                        </td>`).join("")}
+                        <td style="background:#1a2e5a;border-radius:10px;padding:16px 24px;text-align:center;vertical-align:middle;letter-spacing:10px;">
+                          <span style="color:#f5c842;font-size:36px;font-weight:900;font-family:'Courier New',monospace;line-height:1;margin-right:-10px;">${otp}</span>
+                        </td>
                       </tr>
                     </table>
-                    <p style="color:#8a7a40;font-size:11px;margin:16px 0 0;font-weight:600;">⏳ &nbsp;Valid for <strong>10 minutes</strong> only</p>
+                    <p style="color:#8a7a40;font-size:11px;margin:16px 0 0;font-weight:600;">⏳ &nbsp;Valid for <strong>5 minutes</strong> only</p>
                   </td>
                 </tr>
               </table>
