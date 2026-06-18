@@ -32,14 +32,14 @@ const seedDatabase = async () => {
 
     // Create Master Admin Account (with hashed password set)
     const admin = new User({
-      name: "Director Sudeep Das",
-      email: "sudeepdas2525@zohomail.in",
+      name: "Admin",
+      email: "sharda.academyofficial@gmail.com",
       phone: "+91 8888888888",
       role: "admin",
       password: bcryptjs.hashSync("Sudeep@00", salt), // hashed password
     });
     await admin.save();
-    console.log("👤 Admin account seeded: sudeepdas2525@zohomail.in");
+    console.log("👤 Admin account seeded: sharda.academyofficial@gmail.com");
 
     // Seed general Notice Bulletin Board
     const notices = [
@@ -62,7 +62,7 @@ const seedDatabase = async () => {
     console.log("\n🚀 [SEED SUCCESS] Sharda Academy Sandbox populated successfully with Admin account!");
     console.log("-----------------------------------------------------------------");
     console.log("🔑 Logins:");
-    console.log("   - ADMIN: sudeepdas2525@zohomail.in (Pass: Sudeep@00)");
+    console.log("   - ADMIN: sharda.academyofficial@gmail.com (Pass: Sudeep@00)");
     console.log("-----------------------------------------------------------------\n");
 
     await mongoose.connection.close();

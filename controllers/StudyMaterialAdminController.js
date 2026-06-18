@@ -115,7 +115,6 @@ export const getStudyMaterial = async (req, res) => {
 
   if (req.user.role === "student") {
     query.classLevel = req.user.classLevel;
-    query.$or = [{ batch: req.user.batch }, { batch: "All Batches" }];
   } else {
     if (classLevel) query.classLevel = classLevel;
     if (batch) query.batch = batch;

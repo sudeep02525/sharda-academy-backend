@@ -4,9 +4,9 @@ import Timetable from "../models/Timetable.js";
 // @route   POST /api/admin/timetable
 // @access  Private (Admin)
 export const createTimetableEntry = async (req, res) => {
-  const { classLevel, batch, subject, teacherName, day, startTime, endTime, room } = req.body;
+  const { classLevel, batch, subject, day, startTime, endTime, room } = req.body;
 
-  if (!classLevel || !batch || !subject || !teacherName || !day || !startTime || !endTime) {
+  if (!classLevel || !batch || !subject || !day || !startTime || !endTime) {
     return res.status(400).json({
       success: false,
       message: "Please provide all required fields",
@@ -18,7 +18,6 @@ export const createTimetableEntry = async (req, res) => {
       classLevel,
       batch,
       subject,
-      teacherName,
       day,
       startTime,
       endTime,
@@ -40,7 +39,7 @@ export const createTimetableEntry = async (req, res) => {
 // @access  Private (Admin)
 export const updateTimetableEntry = async (req, res) => {
   const { id } = req.params;
-  const { subject, teacherName, startTime, endTime, room } = req.body;
+  const { subject, startTime, endTime, room } = req.body;
 
   try {
     const entry = await Timetable.findById(id);
@@ -50,7 +49,6 @@ export const updateTimetableEntry = async (req, res) => {
     }
 
     if (subject) entry.subject = subject;
-    if (teacherName) entry.teacherName = teacherName;
     if (startTime) entry.startTime = startTime;
     if (endTime) entry.endTime = endTime;
     if (room) entry.room = room;

@@ -60,3 +60,4 @@ AttendanceSchema.index({ studentId: 1, date: 1 }, { unique: true });
 
 const Attendance = mongoose.model("Attendance", AttendanceSchema);
 export default Attendance;
+

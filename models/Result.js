@@ -65,3 +65,4 @@ ResultSchema.pre("save", function () {
 
 const Result = mongoose.model("Result", ResultSchema);
 export default Result;
+

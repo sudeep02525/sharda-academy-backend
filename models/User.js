@@ -48,12 +48,7 @@ const UserSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
-    classLevel: {
-      type: Number, // 1 to 12
-      min: 1,
-      max: 12,
-      default: null,
-    },
+    classLevel: { type: String, default: null },
 
     batch: {
       type: String,
@@ -168,3 +163,4 @@ const UserSchema = new mongoose.Schema(
 
 const User = mongoose.model("User", UserSchema);
 export default User;
+

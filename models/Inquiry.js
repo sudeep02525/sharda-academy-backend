@@ -12,12 +12,7 @@ const InquirySchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    classLevel: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 12,
-    },
+    classLevel: { type: String, default: null },
     phone: {
       type: String,
       required: true,
@@ -42,3 +37,4 @@ const InquirySchema = new mongoose.Schema(
 
 const Inquiry = mongoose.model("Inquiry", InquirySchema);
 export default Inquiry;
+

@@ -20,6 +20,10 @@ const FeeSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    amountPaid: {
+      type: Number,
+      default: 0,
+    },
     dueDate: {
       type: String, // Format: YYYY-MM-DD
       required: true,
@@ -30,7 +34,7 @@ const FeeSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Paid", "Unpaid", "Pending"],
+      enum: ["Paid", "Unpaid", "Pending", "Partial"],
       default: "Unpaid",
     },
     paymentMethod: {
@@ -60,3 +64,4 @@ const FeeSchema = new mongoose.Schema(
 
 const Fee = mongoose.model("Fee", FeeSchema);
 export default Fee;
+

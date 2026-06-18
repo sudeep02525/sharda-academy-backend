@@ -43,6 +43,11 @@ import * as FeeAdminController from "../controllers/FeeAdminController.js";
 import * as ResultAdminController from "../controllers/ResultAdminController.js";
 import * as NoticeAdminController from "../controllers/NoticeAdminController.js";
 import * as TimetableAdminController from "../controllers/TimetableAdminController.js";
+import * as PaymentController from "../controllers/PaymentController.js";
+
+import * as CourseAdminController from "../controllers/CourseAdminController.js";
+import * as SystemController from "../controllers/SystemController.js";
+import * as SiteContentController from "../controllers/SiteContentController.js";
 
 const router = express.Router();
 
@@ -211,8 +216,8 @@ router.get("/student/dashboard", protect, restrictTo("student"), async (req, res
   }
 });
 
-// Student: Change own password
-router.post("/student/change-password", protect, restrictTo("student"), async (req, res) => {
+// User: Change own password (Student/Teacher/Admin)
+router.post("/user/change-password", protect, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ success: false, message: "Current and new passwords are required" });
@@ -220,7 +225,7 @@ router.post("/student/change-password", protect, restrictTo("student"), async (r
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "Student account not found" });
+      return res.status(404).json({ success: false, message: "Account not found" });
     }
     // Verify current password
     const isMatch = bcryptjs.compareSync(currentPassword, user.password);
@@ -232,11 +237,46 @@ router.post("/student/change-password", protect, restrictTo("student"), async (r
     user.password = bcryptjs.hashSync(newPassword, salt);
     await user.save();
     
-    await new ActivityLog({ action: `Student '${user.name}' changed their security password` }).save();
+    await new ActivityLog({ action: `${user.role} '${user.name}' changed their security password` }).save();
     return res.status(200).json({ success: true, message: "Your security password has been changed successfully!" });
   } catch (error) {
     console.error("Change Password Backend Error:", error);
     return res.status(500).json({ success: false, message: "Failed to update password" });
+  }
+});
+
+// @desc    Get user profile
+// @route   GET /api/sams/user/profile
+// @access  Private
+router.get("/user/profile", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("-password");
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    res.status(200).json({ success: true, data: user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// @desc    Update user profile
+// @route   PUT /api/sams/user/profile
+// @access  Private (All Roles)
+router.put("/user/profile", protect, uploadProfilePhoto, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    if (req.body.phone !== undefined) user.phone = req.body.phone;
+    if (req.file) user.profilePhoto = `/uploads/${req.file.filename}`;
+
+    await user.save();
+    
+    // Log activity
+    await new ActivityLog({ action: `User ${user.name} updated their profile` }).save();
+
+    res.status(200).json({ success: true, message: "Profile updated successfully", data: { phone: user.phone, profilePhoto: user.profilePhoto } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -327,6 +367,16 @@ router.get("/admin/analytics", protect, restrictTo("admin"), async (req, res) =>
   } catch (error) {
     console.error("Admin Analytics Fetch Error:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch master admin parameters" });
+  }
+});
+
+// Admin: Get all users
+router.get("/admin/users", protect, restrictTo("admin"), async (req, res) => {
+  try {
+    const users = await User.find().select("-password");
+    res.json({ success: true, count: users.length, data: users });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -532,6 +582,10 @@ router.put("/fees/:id", protect, restrictTo("student"), async (req, res) => {
   }
 });
 
+// Student: Razorpay Payment Flow
+router.post("/student/fees/:id/razorpay-order", protect, restrictTo("student"), PaymentController.createRazorpayOrder);
+router.post("/student/fees/:id/razorpay-verify", protect, restrictTo("student"), PaymentController.verifyRazorpayPayment);
+
 // Admin: Schedule Timetable routines — handled by TimetableAdminController below
 
 // Admin: Upload Results — handled by ResultAdminController below (supports bulk upload)
@@ -702,5 +756,26 @@ router.get("/timetable", protect, TimetableAdminController.getTimetable);
 router.get("/timetable/:id", protect, TimetableAdminController.getTimetableById);
 router.put("/admin/timetable/:id", protect, restrictTo("admin"), TimetableAdminController.updateTimetableEntry);
 router.delete("/admin/timetable/:id", protect, restrictTo("admin"), TimetableAdminController.deleteTimetableEntry);
+
+// ==========================================
+// 🏫 ADMIN COURSES MANAGEMENT
+// ==========================================
+router.post("/admin/courses", protect, restrictTo("admin"), CourseAdminController.createCourse);
+router.get("/admin/courses", protect, restrictTo("admin"), CourseAdminController.getCourses);
+router.put("/admin/courses/:id", protect, restrictTo("admin"), CourseAdminController.updateCourse);
+router.delete("/admin/courses/:id", protect, restrictTo("admin"), CourseAdminController.deleteCourse);
+
+// ==========================================
+// ⚙️ SYSTEM SETTINGS & BACKUP
+// ==========================================
+router.get("/admin/system/backup", protect, restrictTo("admin"), SystemController.getDatabaseBackup);
+router.put("/admin/system/roles/:userId", protect, restrictTo("admin"), SystemController.updateUserRole);
+
+// ==========================================
+// 🌐 WEBSITE CONTENT MANAGEMENT
+// ==========================================
+router.get("/content", SiteContentController.getSiteContent);
+router.put("/admin/content", protect, restrictTo("admin"), SiteContentController.updateSiteContent);
+router.post("/admin/upload-media", protect, restrictTo("admin"), uploadProfilePhoto, SiteContentController.uploadSiteMedia);
 
 export default router;

@@ -17,12 +17,7 @@ const StudyMaterialSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    classLevel: {
-      type: Number, // 1 to 12
-      required: true,
-      min: 1,
-      max: 12,
-    },
+    classLevel: { type: String, default: null },
     batch: {
       type: String, // e.g. "Batch A", "Batch B", or "All Batches"
       default: "All Batches",
@@ -57,3 +52,4 @@ const StudyMaterialSchema = new mongoose.Schema(
 
 const StudyMaterial = mongoose.model("StudyMaterial", StudyMaterialSchema);
 export default StudyMaterial;
+

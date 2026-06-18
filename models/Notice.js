@@ -14,7 +14,7 @@ const NoticeSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["General", "Student", "Teacher", "Parent"],
+      enum: ["General", "Student", "Parent"],
       default: "General",
     },
     author: {
@@ -56,3 +56,4 @@ const NoticeSchema = new mongoose.Schema(
 
 const Notice = mongoose.model("Notice", NoticeSchema);
 export default Notice;
+

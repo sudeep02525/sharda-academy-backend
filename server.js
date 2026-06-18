@@ -4,11 +4,30 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import authRoutes from "./routes/authRoutes.js";
 import samsRoutes from "./routes/samsRoutes.js";
+import http from "http";
+import { Server } from "socket.io";
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  }
+});
+
+// Expose io object to all controllers/routes
+app.set("io", io);
+
+io.on("connection", (socket) => {
+  console.log("🔌 [SOCKET] Client connected:", socket.id);
+  socket.on("disconnect", () => {
+    console.log("🔌 [SOCKET] Client disconnected:", socket.id);
+  });
+});
 const PORT = process.env.PORT || 5000;
 
 // Enable CORS requests for portal servers
@@ -40,7 +59,7 @@ app.use("/api/sams", samsRoutes);
 app.get("/", (req, res) => {
   res.json({
     success: true,
-    message: "Sharda Academy Management System (SAMS) Backend API Active",
+    message: "Sharda Academy Backend API Active",
     version: "1.0.0",
   });
 });
@@ -55,8 +74,8 @@ mongoose
   .then(() => {
     console.log("✅ [DATABASE] MongoDB Connected successfully");
     // Start listening
-    app.listen(PORT, () => {
-      console.log(`🚀 [SAMS SERVER] Service active and listening on port ${PORT}`);
+    httpServer.listen(PORT, () => {
+      console.log(`🚀 [SERVER] Service active and listening on port ${PORT}`);
     });
   })
   .catch((err) => {

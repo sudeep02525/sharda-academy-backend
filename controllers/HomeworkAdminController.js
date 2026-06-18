@@ -37,10 +37,10 @@ const saveBase64File = (base64String, originalName) => {
 export const uploadHomework = async (req, res) => {
   const { title, subject, classLevel, batch, dueDate, description, attachmentName, attachmentData } = req.body;
 
-  if (!title || !subject || !classLevel || !batch || !dueDate) {
+  if (!title || !subject || !classLevel || !dueDate) {
     return res.status(400).json({
       success: false,
-      message: "Please provide title, subject, classLevel, batch, and dueDate",
+      message: "Please provide title, subject, classLevel, and dueDate",
     });
   }
 
@@ -49,13 +49,18 @@ export const uploadHomework = async (req, res) => {
       title,
       subject,
       classLevel,
-      batch,
+      batch: batch || "All Batches",
       dueDate,
       description: description || "",
       attachmentName: attachmentName || "",
       attachmentData: attachmentData ? saveBase64File(attachmentData, attachmentName) : "",
-      teacherName: req.user.name || "Admin",
     });
+
+    // Emit real-time notification to students
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("new_homework", homework);
+    }
 
     res.status(201).json({
       success: true,
@@ -113,7 +118,6 @@ export const getHomework = async (req, res) => {
 
   if (req.user.role === "student") {
     query.classLevel = req.user.classLevel;
-    query.batch = req.user.batch;
   } else {
     if (classLevel) query.classLevel = classLevel;
     if (batch) query.batch = batch;

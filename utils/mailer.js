@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -10,20 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Path to logo — embedded as inline attachment so it shows in all email clients
 const LOGO_PATH = path.join(__dirname, "../../sharda-academy-student/public/logo.png");
 
-// Explicit SMTP config supporting .env settings
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT, 10) || 587,
-  secure: process.env.SMTP_SECURE === "true", // true for port 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER || process.env.GMAIL_USER,
-    pass: process.env.SMTP_PASS || process.env.GMAIL_APP_PASS,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
-  tls: { rejectUnauthorized: false },
-});
+const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy_key_to_prevent_crash_on_startup");
 
 /**
  * Send OTP email to a student
@@ -113,7 +100,7 @@ export const sendOTPEmail = async (toEmail, otp, type = "registration") => {
                 © ${new Date().getFullYear()} <strong style="color:#f5c842;">Sharda Academy</strong>, Mankhurd – 43 &nbsp;|&nbsp; Do not reply to this email
               </p>
               <p style="color:#6b7f9e;font-size:10px;margin:6px 0 0;">
-                This is an automated message from the SAMS Student Portal
+                This is an automated message from the Sharda Academy Student Portal
               </p>
             </td>
           </tr>
@@ -135,13 +122,13 @@ export const sendOTPEmail = async (toEmail, otp, type = "registration") => {
     });
   }
 
-  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER;
-  await transporter.sendMail({
-    from: `"Sharda Academy SAMS" <${fromEmail}>`,
-    to: toEmail,
+  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || "onboarding@resend.dev";
+  await resend.emails.send({
+    from: `"Sharda Academy" <${fromEmail}>`,
+    to: [toEmail],
     subject,
     html,
-    attachments,
+    attachments: attachments.map(a => ({ filename: a.filename, content: fs.readFileSync(a.path) })),
   });
 
   console.log(`✅ [MAILER] OTP email sent to ${toEmail} (type: ${type})`);
@@ -215,16 +202,16 @@ export const sendNoticeBulkEmail = async (toEmails, noticeTitle, noticeContent) 
     });
   }
 
-  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER;
+  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || "onboarding@resend.dev";
   
   try {
-    await transporter.sendMail({
-      from: `"Sharda Academy SAMS" <${fromEmail}>`,
-      to: fromEmail,
+    await resend.emails.send({
+      from: `"Sharda Academy" <${fromEmail}>`,
+      to: [fromEmail],
       bcc: toEmails,
       subject,
       html,
-      attachments,
+      attachments: attachments.map(a => ({ filename: a.filename, content: fs.readFileSync(a.path) })),
     });
     console.log(`✅ [MAILER] Notice bulk email sent to ${toEmails.length} recipients`);
   } catch (error) {
@@ -309,15 +296,15 @@ export const sendHomeworkBulkEmail = async (toEmails, homeworkTitle, subjectName
     });
   }
 
-  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER;
+  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || "onboarding@resend.dev";
   try {
-    await transporter.sendMail({
-      from: `"Sharda Academy SAMS" <${fromEmail}>`,
-      to: fromEmail,
+    await resend.emails.send({
+      from: `"Sharda Academy" <${fromEmail}>`,
+      to: [fromEmail],
       bcc: toEmails,
       subject,
       html,
-      attachments,
+      attachments: attachments.map(a => ({ filename: a.filename, content: fs.readFileSync(a.path) })),
     });
     console.log(`✅ [MAILER] Homework alert bulk email sent to ${toEmails.length} students`);
   } catch (error) {
@@ -406,14 +393,14 @@ export const sendFeeReminderEmail = async (toEmail, studentName, invoiceId, amou
     });
   }
 
-  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER;
+  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || "onboarding@resend.dev";
   try {
-    await transporter.sendMail({
-      from: `"Sharda Academy SAMS" <${fromEmail}>`,
-      to: toEmail,
+    await resend.emails.send({
+      from: `"Sharda Academy" <${fromEmail}>`,
+      to: [toEmail],
       subject,
       html,
-      attachments,
+      attachments: attachments.map(a => ({ filename: a.filename, content: fs.readFileSync(a.path) })),
     });
     console.log(`✅ [MAILER] Fee reminder email sent to ${toEmail}`);
   } catch (error) {
@@ -507,14 +494,14 @@ export const sendExamAlertEmail = async (toEmail, studentName, examName, results
     });
   }
 
-  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER;
+  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || "onboarding@resend.dev";
   try {
-    await transporter.sendMail({
-      from: `"Sharda Academy SAMS" <${fromEmail}>`,
-      to: toEmail,
+    await resend.emails.send({
+      from: `"Sharda Academy" <${fromEmail}>`,
+      to: [toEmail],
       subject,
       html,
-      attachments,
+      attachments: attachments.map(a => ({ filename: a.filename, content: fs.readFileSync(a.path) })),
     });
     console.log(`✅ [MAILER] Exam alert email sent to ${toEmail}`);
   } catch (error) {

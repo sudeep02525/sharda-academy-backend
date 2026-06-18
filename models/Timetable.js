@@ -2,21 +2,12 @@ import mongoose from "mongoose";
 
 const TimetableSchema = new mongoose.Schema(
   {
-    classLevel: {
-      type: Number, // 1 to 12
-      required: true,
-      min: 1,
-      max: 12,
-    },
+    classLevel: { type: String, default: null },
     batch: {
       type: String, // e.g. "Batch A", "NEET Premium"
       required: true,
     },
     subject: {
-      type: String,
-      required: true,
-    },
-    teacherName: {
       type: String,
       required: true,
     },
@@ -45,3 +36,4 @@ const TimetableSchema = new mongoose.Schema(
 
 const Timetable = mongoose.model("Timetable", TimetableSchema);
 export default Timetable;
+

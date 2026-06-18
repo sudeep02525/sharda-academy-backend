@@ -28,6 +28,12 @@ export const createNotice = async (req, res) => {
       author: req.user.name || "Admin",
     });
 
+    // Emit real-time notification to students
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("new_notice", notice);
+    }
+
     res.status(201).json({
       success: true,
       message: "Notice created successfully",

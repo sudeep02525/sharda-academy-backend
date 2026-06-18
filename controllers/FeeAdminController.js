@@ -45,6 +45,12 @@ export const addFeeInvoice = async (req, res) => {
       status: "Unpaid",
     });
 
+    // Emit real-time notification to students
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("new_fee", fee);
+    }
+
     res.status(201).json({
       success: true,
       message: "Fee invoice created successfully",
@@ -60,7 +66,7 @@ export const addFeeInvoice = async (req, res) => {
 // @access  Private (Admin)
 export const updateFeeStatus = async (req, res) => {
   const { id } = req.params;
-  const { status, paymentDate, paymentMethod, amount, description } = req.body;
+  const { status, paymentDate, paymentMethod, amount, description, amountPaid } = req.body;
 
   try {
     const fee = await Fee.findById(id);
@@ -69,7 +75,20 @@ export const updateFeeStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: "Fee record not found" });
     }
 
-    if (status) fee.status = status;
+    if (amountPaid !== undefined) {
+      fee.amountPaid = (fee.amountPaid || 0) + Number(amountPaid);
+      if (fee.amountPaid >= fee.amount) {
+        fee.status = "Paid";
+      } else if (fee.amountPaid > 0) {
+        fee.status = "Partial";
+      }
+    } else if (status) {
+      fee.status = status;
+      if (status === "Paid") {
+        fee.amountPaid = fee.amount;
+      }
+    }
+
     if (paymentDate) fee.paymentDate = paymentDate;
     if (paymentMethod) fee.paymentMethod = paymentMethod;
     if (amount) fee.amount = amount;
@@ -78,13 +97,19 @@ export const updateFeeStatus = async (req, res) => {
     await fee.save();
 
     // Update student fee status
-    if (status === "Paid") {
-      const unpaidCount = await Fee.countDocuments({ studentId: fee.studentId, status: "Unpaid" });
+    if (fee.status === "Paid") {
+      const unpaidCount = await Fee.countDocuments({ studentId: fee.studentId, status: { $in: ["Unpaid", "Partial", "Pending"] } });
       if (unpaidCount === 0) {
         await User.findByIdAndUpdate(fee.studentId, { feeStatus: "Paid" });
       }
     } else {
-      await User.findByIdAndUpdate(fee.studentId, { feeStatus: status || "Unpaid" });
+      await User.findByIdAndUpdate(fee.studentId, { feeStatus: fee.status || "Unpaid" });
+    }
+
+    // Emit real-time notification to all connected clients (student and admin)
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("fee_paid", fee);
     }
 
     res.status(200).json({
@@ -137,7 +162,7 @@ export const getPendingDues = async (req, res) => {
   const { classStandard, batch } = req.query;
 
   try {
-    const query = { status: { $in: ["Unpaid", "Pending"] } };
+    const query = { status: { $in: ["Unpaid", "Pending", "Partial"] } };
 
     if (classStandard) query.classStandard = classStandard;
     if (batch) query.batch = batch;
@@ -146,7 +171,7 @@ export const getPendingDues = async (req, res) => {
       .populate("studentId", "name email rollNumber")
       .sort({ dueDate: 1 });
 
-    const totalPending = pendingFees.reduce((sum, fee) => sum + fee.amount, 0);
+    const totalPending = pendingFees.reduce((sum, fee) => sum + (fee.amount - (fee.amountPaid || 0)), 0);
     const totalRecords = pendingFees.length;
 
     res.status(200).json({
@@ -174,9 +199,9 @@ export const getFeeSummary = async (req, res) => {
     const fees = await Fee.find({ studentId }).sort({ createdAt: -1 });
 
     const totalAmount = fees.reduce((sum, fee) => sum + fee.amount, 0);
-    const paidAmount = fees.filter((f) => f.status === "Paid").reduce((sum, fee) => sum + fee.amount, 0);
-    const unpaidAmount = fees.filter((f) => f.status === "Unpaid").reduce((sum, fee) => sum + fee.amount, 0);
-    const pendingAmount = fees.filter((f) => f.status === "Pending").reduce((sum, fee) => sum + fee.amount, 0);
+    const paidAmount = fees.reduce((sum, fee) => sum + (fee.amountPaid || 0), 0);
+    const unpaidAmount = fees.reduce((sum, fee) => sum + (fee.amount - (fee.amountPaid || 0)), 0);
+    const pendingAmount = fees.filter((f) => f.status === "Pending").reduce((sum, fee) => sum + (fee.amount - (fee.amountPaid || 0)), 0);
 
     res.status(200).json({
       success: true,
