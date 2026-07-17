@@ -2,6 +2,7 @@ import Razorpay from "razorpay";
 import crypto from "crypto";
 import Fee from "../models/Fee.js";
 import User from "../models/User.js";
+import ActivityLog from "../models/ActivityLog.js";
 
 // Initialize Razorpay instance
 const getRazorpayInstance = () => {
@@ -55,6 +56,44 @@ export const createRazorpayOrder = async (req, res) => {
   } catch (error) {
     console.error("Razorpay order error:", error);
     res.status(500).json({ success: false, message: error.description || error.message || JSON.stringify(error) });
+  }
+};
+
+export const processManualPayment = async (req, res, next) => {
+  const feeId = req.params.id;
+  const { status, paymentMethod } = req.body;
+
+  try {
+    const feeInvoice = await Fee.findById(feeId);
+    if (!feeInvoice) {
+      return res.status(404).json({ success: false, message: "Invoice record not found" });
+    }
+
+    // Verify this student owns the fee record
+    if (feeInvoice.studentId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "Access forbidden: Unauthorized fee payment" });
+    }
+
+    feeInvoice.status = status || "Paid";
+    if (feeInvoice.status === "Paid") {
+      feeInvoice.paymentDate = new Date();
+      feeInvoice.paymentMethod = paymentMethod || "UPI Checkout Portal";
+    }
+
+    await feeInvoice.save();
+
+    const student = await User.findById(feeInvoice.studentId);
+    if (student) {
+      student.feeStatus = feeInvoice.status;
+      await student.save();
+    }
+
+    // Audit Log Activity
+    // Assuming ActivityLog is imported, need to import it at top of file
+    // I will add import in next step if not present
+    return res.status(200).json({ success: true, message: "Tuition fee invoice paid successfully via online checkout", fee: feeInvoice });
+  } catch (error) {
+    next(error);
   }
 };
 

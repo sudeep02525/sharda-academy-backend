@@ -2,30 +2,21 @@ import StudyMaterial from "../models/StudyMaterial.js";
 import fs from "fs";
 import path from "path";
 
-// Helper to save Base64 file
-const saveBase64File = (base64String, originalName) => {
+import cloudinary from "../config/cloudinary.js";
+
+// Helper to save Base64 file to Cloudinary
+const saveBase64File = async (base64String, originalName) => {
   if (!base64String || !base64String.startsWith("data:")) {
     return base64String || "";
   }
   try {
-    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-      return base64String;
-    }
-    const fileBuffer = Buffer.from(matches[2], "base64");
-    const ext = path.extname(originalName) || ".pdf";
-    const baseName = path.basename(originalName, ext).replace(/[^a-zA-Z0-9]/g, "_");
-    const uniqueName = `${baseName}_${Date.now()}${ext}`;
-
-    const uploadsDir = "./uploads";
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir);
-    }
-
-    fs.writeFileSync(path.join(uploadsDir, uniqueName), fileBuffer);
-    return `/uploads/${uniqueName}`;
+    const result = await cloudinary.uploader.upload(base64String, {
+      folder: "sharda-academy/studymaterial",
+      resource_type: "auto",
+    });
+    return result.secure_url;
   } catch (err) {
-    console.error("Failed to save file:", err.message);
+    console.error("Failed to save file to Cloudinary:", err.message);
     return "";
   }
 };
@@ -44,6 +35,8 @@ export const uploadStudyMaterial = async (req, res) => {
   }
 
   try {
+    const attachmentUrl = attachmentData ? await saveBase64File(attachmentData, attachmentName) : "";
+
     const studyMaterial = await StudyMaterial.create({
       title,
       subject,
@@ -51,7 +44,7 @@ export const uploadStudyMaterial = async (req, res) => {
       batch: batch || "All Batches",
       materialType: materialType || "Notes",
       attachmentName: attachmentName || "",
-      attachmentData: attachmentData ? saveBase64File(attachmentData, attachmentName) : "",
+      attachmentData: attachmentUrl,
       description: description || "",
       pages: pages || "",
       fileSize: fileSize || "",
@@ -88,7 +81,7 @@ export const updateStudyMaterial = async (req, res) => {
     if (materialType) studyMaterial.materialType = materialType;
     if (attachmentName) studyMaterial.attachmentName = attachmentName;
     if (attachmentData) {
-      studyMaterial.attachmentData = saveBase64File(attachmentData, attachmentName);
+      studyMaterial.attachmentData = await saveBase64File(attachmentData, attachmentName);
     }
     if (description !== undefined) studyMaterial.description = description;
     if (pages) studyMaterial.pages = pages;
@@ -172,10 +165,11 @@ export const deleteStudyMaterial = async (req, res) => {
     }
 
     // Delete file if exists
-    if (studyMaterial.attachmentData && studyMaterial.attachmentData.startsWith("/uploads/")) {
-      const filePath = path.join(".", studyMaterial.attachmentData);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    if (studyMaterial.attachmentData && studyMaterial.attachmentData.includes("cloudinary.com")) {
+      const publicIdMatch = studyMaterial.attachmentData.match(/\/upload\/(?:v\d+\/)?([^\.]+)/);
+      if (publicIdMatch && publicIdMatch[1]) {
+         await cloudinary.uploader.destroy(publicIdMatch[1], { resource_type: "raw" }).catch(e => console.error("Cloudinary delete error:", e));
+         await cloudinary.uploader.destroy(publicIdMatch[1], { resource_type: "image" }).catch(e => console.error("Cloudinary delete error:", e));
       }
     }
 

@@ -8,6 +8,11 @@ const SiteContentSchema = new mongoose.Schema({
     phone: { type: String, default: "+91 93244 44269" },
     address: { type: String, default: "Mankhurd-43, Mumbai" }
   },
+  seo: {
+    title: { type: String, default: "Sharda Academy | Quality Education & Skill Development Institute" },
+    description: { type: String, default: "Sharda Academy provides quality education, professional training, and skill development programs designed to help students achieve academic excellence, practical knowledge, and career success." },
+    keywords: { type: String, default: "Sharda Academy, SSC coaching Mankhurd, HSC coaching Mumbai, coaching classes Mankhurd, board preparation, classes 1 to 12 coaching Mumbai" }
+  },
   hero: {
     title: { type: String, default: "Nurturing Minds & Building Board Exam Toppers from Class 1st to 12th" },
     highlight: { type: String, default: "Board Exam Toppers" },

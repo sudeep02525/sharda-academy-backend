@@ -1,5 +1,7 @@
 import Fee from "../models/Fee.js";
 import User from "../models/User.js";
+import ActivityLog from "../models/ActivityLog.js";
+import { sendFeeReminderEmail } from "../utils/mailer.js";
 
 // Helper to generate invoice number
 const generateInvoiceNumber = async () => {
@@ -222,7 +224,7 @@ export const getFeeSummary = async (req, res) => {
 // @desc    Delete fee record (Admin)
 // @route   DELETE /api/admin/fees/:id
 // @access  Private (Admin)
-export const deleteFee = async (req, res) => {
+export const deleteFee = async (req, res, next) => {
   const { id } = req.params;
 
   try {
@@ -239,6 +241,38 @@ export const deleteFee = async (req, res) => {
       message: "Fee record deleted successfully",
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    next(error);
+  }
+};
+
+// @desc    Trigger transactional fee payment reminder email to parent and student
+// @route   POST /api/admin/fees/remind/:id
+// @access  Private (Admin)
+export const remindFeePayment = async (req, res, next) => {
+  try {
+    const feeInvoice = await Fee.findById(req.params.id);
+    if (!feeInvoice) {
+      return res.status(404).json({ success: false, message: "Invoice record not found" });
+    }
+    const student = await User.findById(feeInvoice.studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Associated student not found" });
+    }
+
+    const emails = [student.email, student.parentEmail].filter(Boolean);
+    if (emails.length > 0) {
+      for (const email of emails) {
+        try {
+          await sendFeeReminderEmail(email, student.name, feeInvoice.invoiceId, feeInvoice.amount, feeInvoice.dueDate);
+        } catch (mailErr) {
+          console.error(`⚠️ Fee email alert failed for ${email}:`, mailErr.message);
+        }
+      }
+    }
+
+    await new ActivityLog({ action: `Sent fee invoice payment reminder for '${feeInvoice.invoiceId}' to student/parent` }).save();
+    return res.status(200).json({ success: true, message: `Fee payment reminder sent successfully to student and parent` });
+  } catch (err) {
+    next(err);
   }
 };

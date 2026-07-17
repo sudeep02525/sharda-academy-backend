@@ -3,30 +3,21 @@ import User from "../models/User.js";
 import fs from "fs";
 import path from "path";
 
-// Helper to save Base64 file
-const saveBase64File = (base64String, originalName) => {
+import cloudinary from "../config/cloudinary.js";
+
+// Helper to save Base64 file to Cloudinary
+const saveBase64File = async (base64String, originalName) => {
   if (!base64String || !base64String.startsWith("data:")) {
     return base64String || "";
   }
   try {
-    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-      return base64String;
-    }
-    const fileBuffer = Buffer.from(matches[2], "base64");
-    const ext = path.extname(originalName) || ".pdf";
-    const baseName = path.basename(originalName, ext).replace(/[^a-zA-Z0-9]/g, "_");
-    const uniqueName = `${baseName}_${Date.now()}${ext}`;
-
-    const uploadsDir = "./uploads";
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir);
-    }
-
-    fs.writeFileSync(path.join(uploadsDir, uniqueName), fileBuffer);
-    return `/uploads/${uniqueName}`;
+    const result = await cloudinary.uploader.upload(base64String, {
+      folder: "sharda-academy/homework",
+      resource_type: "auto",
+    });
+    return result.secure_url;
   } catch (err) {
-    console.error("Failed to save file:", err.message);
+    console.error("Failed to save file to Cloudinary:", err.message);
     return "";
   }
 };
@@ -45,6 +36,8 @@ export const uploadHomework = async (req, res) => {
   }
 
   try {
+    const attachmentUrl = attachmentData ? await saveBase64File(attachmentData, attachmentName) : "";
+
     const homework = await Homework.create({
       title,
       subject,
@@ -53,7 +46,7 @@ export const uploadHomework = async (req, res) => {
       dueDate,
       description: description || "",
       attachmentName: attachmentName || "",
-      attachmentData: attachmentData ? saveBase64File(attachmentData, attachmentName) : "",
+      attachmentData: attachmentUrl,
     });
 
     // Emit real-time notification to students
@@ -94,7 +87,7 @@ export const updateHomework = async (req, res) => {
     if (description !== undefined) homework.description = description;
     if (attachmentName) homework.attachmentName = attachmentName;
     if (attachmentData) {
-      homework.attachmentData = saveBase64File(attachmentData, attachmentName);
+      homework.attachmentData = await saveBase64File(attachmentData, attachmentName);
     }
 
     await homework.save();
@@ -174,10 +167,11 @@ export const deleteHomework = async (req, res) => {
     }
 
     // Delete file if exists
-    if (homework.attachmentData && homework.attachmentData.startsWith("/uploads/")) {
-      const filePath = path.join(".", homework.attachmentData);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    if (homework.attachmentData && homework.attachmentData.includes("cloudinary.com")) {
+      const publicIdMatch = homework.attachmentData.match(/\/upload\/(?:v\d+\/)?([^\.]+)/);
+      if (publicIdMatch && publicIdMatch[1]) {
+         await cloudinary.uploader.destroy(publicIdMatch[1], { resource_type: "raw" }).catch(e => console.error("Cloudinary delete error:", e));
+         await cloudinary.uploader.destroy(publicIdMatch[1], { resource_type: "image" }).catch(e => console.error("Cloudinary delete error:", e));
       }
     }
 

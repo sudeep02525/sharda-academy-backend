@@ -1,41 +1,17 @@
 import multer from "multer";
-import path from "path";
-import fs from "fs";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import cloudinary from "../config/cloudinary.js";
 
-// Ensure uploads/images folder exists
-const uploadDir = "./uploads/images";
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Storage Configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueName = `student_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`;
-    cb(null, uniqueName);
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'sharda-academy/profiles',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
   },
 });
 
-// File Filter for Validation
-const fileFilter = (req, file, cb) => {
-  const allowedExtensions = [".jpg", ".jpeg", ".png", ".webp"];
-  const ext = path.extname(file.originalname).toLowerCase();
-
-  if (allowedExtensions.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Invalid file type. Only JPG, JPEG, PNG, and WEBP images are allowed."), false);
-  }
-};
-
-// Multer Instance
 const upload = multer({
   storage,
-  fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
@@ -65,3 +41,4 @@ export const uploadProfilePhoto = (req, res, next) => {
     next();
   });
 };
+

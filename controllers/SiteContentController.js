@@ -29,8 +29,14 @@ export const updateSiteContent = async (req, res) => {
 
     const updates = req.body;
     
+    // Basic validation
+    if (updates.seo && updates.seo.title && updates.seo.title.length > 100) {
+      return res.status(400).json({ success: false, message: "SEO title cannot exceed 100 characters" });
+    }
+    
     // Update fields
     if (updates.settings) content.settings = { ...content.settings, ...updates.settings };
+    if (updates.seo) content.seo = { ...content.seo, ...updates.seo };
     if (updates.hero) content.hero = { ...content.hero, ...updates.hero };
     if (updates.stats) content.stats = updates.stats;
     if (updates.wings) content.wings = updates.wings;
@@ -59,9 +65,10 @@ export const uploadSiteMedia = async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ success: false, message: "No file provided" });
     }
-    const fileUrl = `/uploads/images/${req.file.filename}`;
+    // req.file.path is provided by CloudinaryStorage
+    const fileUrl = req.file.path;
     
-    await new ActivityLog({ action: `Admin uploaded new media file: ${req.file.filename}` }).save();
+    await new ActivityLog({ action: `Admin uploaded new media file: ${req.file.originalname || 'image'}` }).save();
 
     res.status(200).json({ success: true, message: "Media uploaded successfully", url: fileUrl });
   } catch (error) {
